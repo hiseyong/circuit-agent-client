@@ -175,33 +175,61 @@ Rectangle {
                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                 ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
 
-                Image {
-                    id: preview
-                    source: kicadController ? kicadController.schematicUrl : ""
-                    asynchronous: true
-                    cache: false
-                    smooth: true
-                    mipmap: true
-                    fillMode: Image.Stretch
-                    width: root.nativeReady ? root.nativeW * root.zoom : implicitWidth
-                    height: root.nativeReady ? root.nativeH * root.zoom : implicitHeight
-                    sourceSize.width: root.renderW
-                    sourceSize.height: root.renderH
+                Item {
+                    id: previewLayer
+                    width: preview.width
+                    height: preview.height
 
-                    onStatusChanged: {
-                        if (status === Image.Error && root.rasterCap > 2048) {
-                            root.rasterCap = 2048
-                            return
+                    Image {
+                        id: preview
+                        source: kicadController ? kicadController.schematicUrl : ""
+                        asynchronous: true
+                        cache: false
+                        smooth: true
+                        mipmap: true
+                        fillMode: Image.Stretch
+                        width: root.nativeReady ? root.nativeW * root.zoom : implicitWidth
+                        height: root.nativeReady ? root.nativeH * root.zoom : implicitHeight
+                        sourceSize.width: root.renderW
+                        sourceSize.height: root.renderH
+
+                        onStatusChanged: {
+                            if (status === Image.Error && root.rasterCap > 2048) {
+                                root.rasterCap = 2048
+                                return
+                            }
+                            if (status === Image.Ready && !root.nativeReady && implicitWidth > 1 && implicitHeight > 1) {
+                                root.nativeW = implicitWidth
+                                root.nativeH = implicitHeight
+                                root.nativeReady = true
+                                Qt.callLater(root.applyDefaultZoom)
+                            }
                         }
-                        if (status === Image.Ready && !root.nativeReady && implicitWidth > 1 && implicitHeight > 1) {
-                            root.nativeW = implicitWidth
-                            root.nativeH = implicitHeight
-                            root.nativeReady = true
-                            Qt.callLater(root.applyDefaultZoom)
-                        }
+
+                        onSourceChanged: root.resetNative()
                     }
 
-                    onSourceChanged: root.resetNative()
+                    Repeater {
+                        model: kicadController ? kicadController.highlightBoxes : []
+
+                        Rectangle {
+                            required property var modelData
+                            visible: projectController
+                                     && projectController.detailReference === modelData.reference
+                                     && kicadController
+                                     && kicadController.schematicPageWidth > 0
+                            readonly property real sx: preview.width / kicadController.schematicPageWidth
+                            readonly property real sy: preview.height / kicadController.schematicPageHeight
+                            x: (modelData.x - modelData.w / 2) * sx
+                            y: (modelData.y - modelData.h / 2) * sy
+                            width: modelData.w * sx
+                            height: modelData.h * sy
+                            color: "#334a8fc4"
+                            border.color: "#4a8fc4"
+                            border.width: 2
+                            radius: 3
+                        }
+                    }
                 }
 
                 WheelHandler {

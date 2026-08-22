@@ -125,9 +125,12 @@ Rectangle {
                 chatList.scrollToEnd()
 
             delegate: Item {
+                id: chatDelegate
                 required property string role
                 required property string content
                 required property string timestamp
+                required property string level
+                readonly property bool isError: role === "system" && level === "error"
                 width: chatList.width - chatList.leftMargin - chatList.rightMargin
                 height: bubbleCol.implicitHeight
 
@@ -139,8 +142,8 @@ Rectangle {
                     Row {
                         spacing: 8
                         Text {
-                            text: role === "user" ? "User" : (role === "system" ? "System" : "Agent")
-                            color: role === "user" ? "#5b9fd4" : (role === "system" ? "#e05d5d" : "#3ecf8e")
+                            text: role === "user" ? "User" : (role === "system" ? (chatDelegate.isError ? "Error" : "System") : "Agent")
+                            color: role === "user" ? "#5b9fd4" : (chatDelegate.isError ? "#e05d5d" : (role === "system" ? "#c4a35a" : "#3ecf8e"))
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
                         }
@@ -157,8 +160,8 @@ Rectangle {
                                : parent.width
                         height: messageText.contentHeight + 20
                         radius: 6
-                        color: role === "user" ? "#223247" : (role === "system" ? "#3a2428" : "#252a33")
-                        border.color: role === "user" ? "#2f4a6a" : "#333845"
+                        color: role === "user" ? "#223247" : (chatDelegate.isError ? "#3a2428" : "#252a33")
+                        border.color: role === "user" ? "#2f4a6a" : (chatDelegate.isError ? "#5a3036" : "#333845")
 
                         SelectableText {
                             id: messageText

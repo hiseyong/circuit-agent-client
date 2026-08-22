@@ -454,7 +454,9 @@ class AgentController(QObject):
             self._machine.force(AgentStatus.ERROR)
             self.agentStatusChanged.emit()
             self.busyChanged.emit()
-        self._chat.append(ChatMessage(role=ChatRole.SYSTEM, content=user_message))
+        self._chat.append(
+            ChatMessage(role=ChatRole.SYSTEM, content=user_message, level="error")
+        )
         self._persist()
         self._set_status(AgentStatus.IDLE)
 

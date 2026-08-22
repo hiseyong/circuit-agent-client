@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import logging
 
+from pathlib import Path
+
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 
 from circuit_agent.application.async_runner import AsyncRunner
 from circuit_agent.controllers.project_controller import ProjectController
 from circuit_agent.kicad.client import KiCadClient
+from circuit_agent.kicad.schematic_highlight import highlight_boxes
 from circuit_agent.models.project import Project
 
 logger = logging.getLogger("circuit_agent.kicad")
@@ -19,6 +22,7 @@ class KiCadController(QObject):
     connectedChanged = Signal()
     selectProjectRequested = Signal()
     schematicChanged = Signal()
+    highlightChanged = Signal()
     pcbChanged = Signal()
     pcbBusyChanged = Signal()
 
@@ -37,6 +41,9 @@ class KiCadController(QObject):
         self._mode = mode
         self._connected = False
         self._schematic_path = ""
+        self._highlight_boxes: list[dict[str, object]] = []
+        self._page_width = 297.0
+        self._page_height = 210.0
         self._pcb_path = ""
         self._pcb_error = ""
         self._pcb_view = "iso"
@@ -61,6 +68,18 @@ class KiCadController(QObject):
         if not self._schematic_path:
             return ""
         return QUrl.fromLocalFile(self._schematic_path).toString()
+
+    @Property("QVariantList", notify=highlightChanged)
+    def highlightBoxes(self) -> list[dict[str, object]]:
+        return list(self._highlight_boxes)
+
+    @Property(float, notify=highlightChanged)
+    def schematicPageWidth(self) -> float:
+        return self._page_width
+
+    @Property(float, notify=highlightChanged)
+    def schematicPageHeight(self) -> float:
+        return self._page_height
 
     @Property(str, notify=pcbChanged)
     def pcbUrl(self) -> str:
@@ -202,16 +221,37 @@ class KiCadController(QObject):
 
     def _on_preview_ready(self, path: str) -> None:
         self._set_schematic_path(path)
+        self._load_highlights(path)
         if path:
             logger.info("Schematic preview ready")
 
     def _on_preview_error(self, exc: BaseException) -> None:
         self._set_schematic_path("")
+        self._clear_highlights()
         logger.error("Schematic preview failed: %s", exc)
 
     def _set_schematic_path(self, path: str) -> None:
         self._schematic_path = path
         self.schematicChanged.emit()
+        if not path:
+            self._clear_highlights()
+
+    def _load_highlights(self, svg_path: str) -> None:
+        project_path = self._project_controller.projectPath
+        if not project_path or not svg_path:
+            self._clear_highlights()
+            return
+        data = highlight_boxes(Path(project_path).with_suffix(".kicad_sch"), Path(svg_path))
+        self._page_width = float(data["pageWidth"])
+        self._page_height = float(data["pageHeight"])
+        self._highlight_boxes = list(data["boxes"])
+        self.highlightChanged.emit()
+
+    def _clear_highlights(self) -> None:
+        self._highlight_boxes = []
+        self._page_width = 297.0
+        self._page_height = 210.0
+        self.highlightChanged.emit()
 
     def _on_project_error(self, exc: BaseException) -> None:
         logger.error("Failed to open KiCad project: %s", exc)

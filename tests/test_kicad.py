@@ -1,3 +1,5 @@
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -5,10 +7,17 @@ import pytest
 from circuit_agent.application.app import create_kicad_client
 from circuit_agent.application.config import AppConfig
 from circuit_agent.kicad.client import KiCadError
-from circuit_agent.kicad.local_client import LocalKiCadClient
+from circuit_agent.kicad.local_client import LocalKiCadClient, _start_gui_process
 from circuit_agent.kicad.mock_client import MockKiCadClient
 from circuit_agent.kicad.netlist import format_connections, parse_kicad_netlist
+from circuit_agent.kicad.paths import (
+    find_kicad,
+    find_kicad_cli,
+    resolve_kicad_cli,
+    resolve_kicad_executable,
+)
 from circuit_agent.kicad.pcb_render import find_board_file
+from circuit_agent.kicad.schematic_highlight import highlight_boxes, parse_symbol_origins
 from circuit_agent.kicad.project_io import (
     attach_component_nets,
     load_project_snapshot,
@@ -446,3 +455,68 @@ def test_find_board_file_prefers_sibling(tmp_path: Path) -> None:
     empty = tmp_path / "empty"
     empty.mkdir()
     assert find_board_file(empty / "missing.kicad_pro") is None
+
+
+def test_parse_symbol_origins_and_highlight_boxes(tmp_path: Path) -> None:
+    schematic = tmp_path / "board.kicad_sch"
+    schematic.write_text(
+        """
+        (kicad_sch
+          (lib_symbols
+            (symbol "Device:R" (property "Reference" "R"))
+          )
+          (symbol
+            (lib_id "Device:R")
+            (at 149.86 80.01 0)
+            (property "Reference" "R4" (at 153.75 79.37 0))
+            (property "Value" "560" (at 154.32 81.91 0))
+          )
+        )
+        """,
+        encoding="utf-8",
+    )
+    svg = tmp_path / "board.svg"
+    svg.write_text(
+        '<svg viewBox="0.0000 0.0000 297.0022 210.0072"></svg>\n',
+        encoding="utf-8",
+    )
+    origins = parse_symbol_origins(schematic)
+    assert origins["R4"] == (149.86, 80.01)
+    data = highlight_boxes(schematic, svg)
+    assert data["pageWidth"] == 297.0022
+    assert data["boxes"][0]["reference"] == "R4"
+    assert data["boxes"][0]["x"] == 149.86
+
+
+def _fake_windows_kicad(root: Path) -> tuple[Path, Path]:
+    bindir = root / "KiCad" / "9.0" / "bin"
+    bindir.mkdir(parents=True)
+    exe = bindir / "kicad.exe"
+    cli = bindir / "kicad-cli.exe"
+    exe.write_bytes(b"mz")
+    cli.write_bytes(b"mz")
+    return exe, cli
+
+
+def test_resolve_kicad_from_windows_install_layout(tmp_path: Path) -> None:
+    exe, cli = _fake_windows_kicad(tmp_path)
+    install = tmp_path / "KiCad" / "9.0"
+    assert resolve_kicad_executable(install) == exe
+    assert resolve_kicad_executable(exe) == exe
+    assert resolve_kicad_cli(exe) == cli
+    assert resolve_kicad_cli(install) == cli
+    assert find_kicad_cli(exe) == cli
+
+
+def test_find_kicad_resolves_env_install_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    exe, _cli = _fake_windows_kicad(tmp_path)
+    monkeypatch.setenv("CIRCUIT_AGENT_KICAD_PATH", str(tmp_path / "KiCad" / "9.0"))
+    monkeypatch.delenv("KICAD_PATH", raising=False)
+    assert find_kicad() == exe
+
+
+@pytest.mark.asyncio
+async def test_gui_launch_returns_before_process_exits() -> None:
+    started = time.monotonic()
+    await _start_gui_process([sys.executable, "-c", "import time; time.sleep(8)"])
+    assert time.monotonic() - started < 3

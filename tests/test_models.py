@@ -64,8 +64,13 @@ def test_evidence_creation() -> None:
 
 def test_chat_message_and_reply_defaults() -> None:
     message = ChatMessage(role=ChatRole.USER, content="Check U1")
+    system = ChatMessage(role=ChatRole.SYSTEM, content="Last schematic edit committed.")
+    error = ChatMessage(role=ChatRole.SYSTEM, content="Backend error", level="error")
     reply = AgentReply(content="mocked")
     assert message.role is ChatRole.USER
+    assert message.level == "info"
+    assert system.level == "info"
+    assert error.level == "error"
     assert message.timestamp is not None
     assert reply.evidence == []
     assert reply.issues == []

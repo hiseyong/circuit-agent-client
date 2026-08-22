@@ -17,6 +17,7 @@ class ChatListModel(QAbstractListModel):
     RoleRole = Qt.ItemDataRole.UserRole + 1
     ContentRole = Qt.ItemDataRole.UserRole + 2
     TimestampRole = Qt.ItemDataRole.UserRole + 3
+    LevelRole = Qt.ItemDataRole.UserRole + 4
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -37,6 +38,8 @@ class ChatListModel(QAbstractListModel):
             return item.content
         if role == self.TimestampRole:
             return item.timestamp.strftime("%H:%M:%S")
+        if role == self.LevelRole:
+            return item.level
         return None
 
     def roleNames(self) -> dict[int, bytes]:  # noqa: N802
@@ -44,6 +47,7 @@ class ChatListModel(QAbstractListModel):
             self.RoleRole: b"role",
             self.ContentRole: b"content",
             self.TimestampRole: b"timestamp",
+            self.LevelRole: b"level",
         }
 
     def append(self, message: ChatMessage) -> None:

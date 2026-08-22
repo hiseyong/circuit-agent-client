@@ -38,6 +38,7 @@ class ChatMessage(BaseModel):
     role: ChatRole
     content: str
     timestamp: datetime = Field(default_factory=datetime.now)
+    level: str = "info"
 
 
 class AgentReply(BaseModel):

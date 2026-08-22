@@ -3,25 +3,30 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from pathlib import Path
 
+_VERSIONED_DIR = re.compile(r"^(\d+)(?:\.(\d+))?")
+
 
 def find_kicad() -> Path | None:
-    """Return the KiCad app bundle or executable, if installed."""
+    """Return the KiCad app bundle or GUI executable, if installed."""
 
     for key in ("CIRCUIT_AGENT_KICAD_PATH", "KICAD_PATH"):
         raw = os.environ.get(key, "").strip()
-        if raw:
-            candidate = Path(raw).expanduser()
-            if candidate.exists():
-                return candidate
+        if not raw:
+            continue
+        resolved = resolve_kicad_executable(Path(raw).expanduser())
+        if resolved is not None:
+            return resolved
 
     for candidate in _default_candidates():
-        if candidate.exists():
-            return candidate
+        resolved = resolve_kicad_executable(candidate)
+        if resolved is not None:
+            return resolved
 
-    which = shutil.which("kicad")
+    which = shutil.which("kicad") or shutil.which("kicad.exe")
     if which:
         return Path(which)
     return None
@@ -32,20 +37,58 @@ def find_kicad_cli(kicad_path: Path | None = None) -> Path | None:
 
     app = kicad_path or find_kicad()
     if app is not None:
-        if app.suffix == ".app":
-            cli = app / "Contents" / "MacOS" / "kicad-cli"
-            if cli.exists():
-                return cli
-        sibling = app.with_name("kicad-cli")
-        if sibling.exists():
-            return sibling
-        sibling_exe = app.with_name("kicad-cli.exe")
-        if sibling_exe.exists():
-            return sibling_exe
+        cli = resolve_kicad_cli(app)
+        if cli is not None:
+            return cli
 
-    which = shutil.which("kicad-cli")
+    which = shutil.which("kicad-cli") or shutil.which("kicad-cli.exe")
     if which:
         return Path(which)
+    return None
+
+
+def resolve_kicad_executable(path: Path) -> Path | None:
+    """Accept an exe, install dir, or .app and return a launchable KiCad path."""
+
+    candidate = Path(path).expanduser()
+    if not candidate.exists():
+        return None
+    if _is_macos_app(candidate):
+        return candidate
+    if candidate.is_file() and candidate.name.lower() in {"kicad", "kicad.exe"}:
+        return candidate
+    if candidate.is_file() and candidate.name.lower() in {"kicad-cli", "kicad-cli.exe"}:
+        sibling = resolve_kicad_executable(candidate.with_name("kicad.exe"))
+        if sibling is not None:
+            return sibling
+        return resolve_kicad_executable(candidate.with_name("kicad"))
+    if candidate.is_dir():
+        for relative in _install_relatives("kicad"):
+            found = candidate / relative
+            if found.is_file():
+                return found
+            if _is_macos_app(found):
+                return found
+    return None
+
+
+def resolve_kicad_cli(path: Path) -> Path | None:
+    """Find kicad-cli next to a KiCad executable, install dir, or .app."""
+
+    candidate = Path(path).expanduser()
+    if not candidate.exists():
+        return None
+    if _is_macos_app(candidate):
+        cli = candidate / "Contents" / "MacOS" / "kicad-cli"
+        return cli if cli.is_file() else None
+    search_roots = [candidate]
+    if candidate.is_file():
+        search_roots = [candidate.parent, candidate.parent.parent]
+    for root in search_roots:
+        for relative in _install_relatives("kicad-cli"):
+            found = root / relative
+            if found.is_file():
+                return found
     return None
 
 
@@ -58,13 +101,13 @@ def find_ngspice(kicad_path: Path | None = None) -> Path | None:
             candidate = Path(raw).expanduser()
             if candidate.is_file():
                 return candidate
-    which = shutil.which("ngspice")
+    which = shutil.which("ngspice") or shutil.which("ngspice.exe")
     if which:
         return Path(which)
     app = kicad_path or find_kicad()
     if app is not None:
         for candidate in _ngspice_executables(app):
-            if candidate.is_file() and os.access(candidate, os.X_OK):
+            if candidate.is_file():
                 return candidate
     return None
 
@@ -84,6 +127,22 @@ def find_ngspice_library(kicad_path: Path | None = None) -> Path | None:
             if candidate.is_file():
                 return candidate
     return None
+
+
+def _install_relatives(stem: str) -> tuple[Path, ...]:
+    unix = Path(stem)
+    windows = Path(f"{stem}.exe")
+    return (
+        windows,
+        unix,
+        Path("bin") / windows,
+        Path("bin") / unix,
+        Path("Contents") / "MacOS" / unix,
+    )
+
+
+def _is_macos_app(path: Path) -> bool:
+    return path.suffix == ".app" or (path.is_dir() and (path / "Contents" / "MacOS").exists())
 
 
 def _ngspice_executables(app: Path) -> list[Path]:
@@ -121,8 +180,11 @@ def _ngspice_libraries(app: Path) -> list[Path]:
 
 def _kicad_roots(app: Path) -> list[Path]:
     roots = [app]
-    if app.suffix == ".app":
+    if _is_macos_app(app):
         roots.append(app / "Contents")
+    elif app.is_file():
+        roots.append(app.parent)
+        roots.append(app.parent.parent)
     elif app.name.lower().startswith("kicad"):
         roots.append(app.parent)
         roots.append(app.parent.parent)
@@ -136,10 +198,47 @@ def _default_candidates() -> list[Path]:
         Path("/Applications/KiCad.app"),
         home / "Applications" / "KiCad" / "KiCad.app",
         home / "Applications" / "KiCad.app",
+        Path("/usr/bin/kicad"),
+        Path("/usr/local/bin/kicad"),
     ]
-
-    program_files = os.environ.get("PROGRAMFILES", r"C:\Program Files")
-    kicad_root = Path(program_files) / "KiCad"
-    if kicad_root.exists():
-        candidates.extend(sorted(kicad_root.glob("*/bin/kicad.exe")))
+    candidates.extend(_windows_kicad_candidates())
     return candidates
+
+
+def _windows_kicad_candidates() -> list[Path]:
+    roots: list[Path] = []
+    for key in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+        raw = os.environ.get(key, "").strip()
+        if raw:
+            roots.append(Path(raw) / "KiCad")
+    roots.extend(
+        [
+            Path(r"C:\Program Files\KiCad"),
+            Path(r"C:\Program Files (x86)\KiCad"),
+        ]
+    )
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+    for root in roots:
+        for path in (root / "bin" / "kicad.exe", root / "kicad.exe"):
+            if path not in seen:
+                candidates.append(path)
+                seen.add(path)
+        versioned = []
+        try:
+            versioned = [item / "bin" / "kicad.exe" for item in root.iterdir() if item.is_dir()]
+        except OSError:
+            versioned = []
+        for path in sorted(versioned, key=_install_sort_key, reverse=True):
+            if path not in seen:
+                candidates.append(path)
+                seen.add(path)
+    return candidates
+
+
+def _install_sort_key(path: Path) -> tuple[int, ...]:
+    for part in path.parts:
+        match = _VERSIONED_DIR.match(part)
+        if match:
+            return (int(match.group(1)), int(match.group(2) or 0))
+    return (0, 0)

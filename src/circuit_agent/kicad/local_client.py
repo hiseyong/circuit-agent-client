@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Any
 
 from circuit_agent.kicad.client import CommandApplyResult, KiCadClient, KiCadError
 from circuit_agent.kicad.netlist import dump_connections, export_schematic_netlist
-from circuit_agent.kicad.paths import find_kicad
+from circuit_agent.kicad.paths import find_kicad, resolve_kicad_executable
 from circuit_agent.kicad.pcb_render import export_pcb_png
 from circuit_agent.kicad.preview import export_schematic_svg
 from circuit_agent.kicad.project_io import (
@@ -28,26 +29,61 @@ Finder = Callable[[], Path | None]
 
 
 async def launch_kicad(app_path: Path, project: Path | None = None) -> None:
-    """Start KiCad, or activate it if it is already running."""
+    """Start KiCad, or activate it if it is already running.
 
-    if sys.platform == "darwin":
-        command = ["open", "-a", str(app_path)]
+    On macOS ``open -a`` returns immediately. On Windows/Linux the GUI
+    executable stays running, so this must not wait for it to exit.
+    """
+
+    executable = resolve_kicad_executable(app_path) or app_path
+    if sys.platform == "darwin" and executable.suffix == ".app":
+        command = ["open", "-a", str(executable)]
         if project is not None:
             command.append(str(project))
-    else:
-        command = [str(app_path)]
-        if project is not None:
-            command.append(str(project))
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _stdout, stderr = await process.communicate()
+        if process.returncode != 0:
+            detail = stderr.decode("utf-8", errors="replace").strip()
+            raise KiCadError(detail or "Failed to launch KiCad.")
+        return
 
-    process = await asyncio.create_subprocess_exec(
-        *command,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    _stdout, stderr = await process.communicate()
-    if process.returncode != 0:
+    command = [str(executable)]
+    if project is not None:
+        command.append(str(project))
+    await _start_gui_process(command)
+
+
+async def _start_gui_process(command: list[str]) -> None:
+    """Launch a GUI process without blocking on its lifetime."""
+
+    kwargs: dict[str, Any] = {
+        "stdout": asyncio.subprocess.DEVNULL,
+        "stderr": asyncio.subprocess.PIPE,
+        "stdin": asyncio.subprocess.DEVNULL,
+    }
+    if sys.platform == "win32":
+        # Detach so connect() is not tied to the GUI lifetime, and do not
+        # keep a PIPE open — a full stderr buffer would stall KiCad.
+        kwargs["creationflags"] = (
+            getattr(subprocess, "DETACHED_PROCESS", 0)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        )
+        kwargs["stderr"] = asyncio.subprocess.DEVNULL
+    process = await asyncio.create_subprocess_exec(*command, **kwargs)
+    try:
+        await asyncio.wait_for(process.wait(), timeout=0.6)
+    except TimeoutError:
+        return
+    if process.returncode not in {0, None}:
+        stderr = b""
+        if process.stderr is not None:
+            stderr = await process.stderr.read()
         detail = stderr.decode("utf-8", errors="replace").strip()
-        raise KiCadError(detail or "Failed to launch KiCad.")
+        raise KiCadError(detail or f"Failed to launch KiCad ({process.returncode}).")
 
 
 class LocalKiCadClient(KiCadClient):
