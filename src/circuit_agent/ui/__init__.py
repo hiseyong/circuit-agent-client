@@ -1,0 +1,1 @@
+"""QML user interface assets."""

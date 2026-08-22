@@ -1,0 +1,42 @@
+[project]
+name = "circuit-agent"
+version = "0.1.0"
+description = "Local desktop application for Circuit Agent"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyside6-essentials>=6.7",
+    "pydantic>=2.0",
+]
+
+[project.scripts]
+circuit-agent = "circuit_agent.main:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+circuit_agent = [
+    "ui/qml/*.qml",
+    "ui/qml/components/*.qml",
+    "ui/qml/views/*.qml",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["src"]
+testpaths = ["tests"]
