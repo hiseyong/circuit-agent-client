@@ -62,6 +62,11 @@ class KiCadClient(ABC):
     async def export_preview(self, project_path: str) -> str:
         """Return a local filesystem path to a schematic preview, or empty."""
 
+    async def export_pcb_preview(self, project_path: str, view: str = "iso") -> str:
+        """Return a local filesystem path to a PCB 3D render, or empty."""
+
+        return ""
+
     @abstractmethod
     async def apply_commands(self, commands: list[dict[str, Any]]) -> CommandApplyResult:
         """Apply committed KiCad commands to the open schematic."""

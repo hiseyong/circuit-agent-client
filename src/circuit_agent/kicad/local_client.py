@@ -11,6 +11,7 @@ from typing import Any
 from circuit_agent.kicad.client import CommandApplyResult, KiCadClient, KiCadError
 from circuit_agent.kicad.netlist import dump_connections, export_schematic_netlist
 from circuit_agent.kicad.paths import find_kicad
+from circuit_agent.kicad.pcb_render import export_pcb_png
 from circuit_agent.kicad.preview import export_schematic_svg
 from circuit_agent.kicad.project_io import (
     attach_component_nets,
@@ -115,6 +116,10 @@ class LocalKiCadClient(KiCadClient):
     async def export_preview(self, project_path: str) -> str:
         schematic = Path(project_path).with_suffix(".kicad_sch")
         preview = await asyncio.to_thread(export_schematic_svg, schematic)
+        return str(preview)
+
+    async def export_pcb_preview(self, project_path: str, view: str = "iso") -> str:
+        preview = await asyncio.to_thread(export_pcb_png, Path(project_path), view)
         return str(preview)
 
     async def apply_commands(self, commands: list[dict[str, Any]]) -> CommandApplyResult:

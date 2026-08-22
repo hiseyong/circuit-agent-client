@@ -1,8 +1,11 @@
+from circuit_agent.controllers.spice_controller import SpiceController
 from circuit_agent.kicad.mock_client import MockKiCadClient
 from circuit_agent.kicad.paths import find_ngspice_library
 from circuit_agent.kicad.spice import analysis_command, prepare_spice_deck, run_ngspice
 from circuit_agent.models.spice import SpiceRequest, SpiceResult
+from PySide6.QtCore import QCoreApplication
 import pytest
+from test_analysis import ImmediateRunner
 
 
 KICAD_EXPORT = """
@@ -75,3 +78,17 @@ def test_libngspice_operating_point_on_divider() -> None:
     assert result.ok is True
     assert result.engine == "libngspice"
     assert "2.5" in result.log or "2.500" in result.log
+
+
+def test_spice_controller_manual_run() -> None:
+    QCoreApplication.instance() or QCoreApplication([])
+    client = MockKiCadClient(delay_seconds=0.0)
+    runner = ImmediateRunner()
+    runner.submit(client.connect(), lambda _: None, lambda exc: (_ for _ in ()).throw(exc))
+    controller = SpiceController(client, runner)
+    controller.setAnalysisType("tran")
+    controller.run()
+    assert controller.hasResult is True
+    assert controller.ok is True
+    assert controller.engine == "mock"
+    assert "U1" in controller.log

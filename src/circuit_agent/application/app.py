@@ -16,6 +16,7 @@ from circuit_agent.controllers.agent_controller import AgentController
 from circuit_agent.controllers.analysis_controller import AnalysisController
 from circuit_agent.controllers.kicad_controller import KiCadController
 from circuit_agent.controllers.project_controller import ProjectController
+from circuit_agent.controllers.spice_controller import SpiceController
 from circuit_agent.kicad.client import KiCadClient
 from circuit_agent.kicad.local_client import LocalKiCadClient
 from circuit_agent.kicad.mock_client import MockKiCadClient
@@ -85,6 +86,14 @@ class AppController(QObject):
     def showChat(self) -> bool:
         return self._tabs.is_visible("chat")
 
+    @Property(bool, notify=tabsChanged)
+    def showPcb3d(self) -> bool:
+        return self._tabs.is_visible("pcb3d")
+
+    @Property(bool, notify=tabsChanged)
+    def showSpice(self) -> bool:
+        return self._tabs.is_visible("spice")
+
     @Slot(str)
     def selectTab(self, tab_id: str) -> None:
         previous = self._tabs.active
@@ -139,6 +148,7 @@ class Application:
             self.project_controller,
             mode=self.config.kicad_mode,
         )
+        self.spice_controller = SpiceController(self.kicad, self.async_runner)
         self.project_controller.bind_kicad(self.kicad_controller)
         self.kicad_controller.bind_analysis(self.analysis_controller)
         self.analysis_controller.bind_ui(

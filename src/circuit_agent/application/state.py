@@ -58,12 +58,14 @@ class AgentStateMachine:
         return self.status
 
 
-TAB_IDS = ("schematic", "analysis", "issues", "chat")
+TAB_IDS = ("schematic", "analysis", "issues", "chat", "pcb3d", "spice")
 TAB_TITLES = {
     "schematic": "Schematic",
     "analysis": "Analysis",
     "issues": "Issues",
     "chat": "Chat",
+    "pcb3d": "PCB 3D",
+    "spice": "SPICE",
 }
 
 

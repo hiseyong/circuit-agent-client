@@ -43,6 +43,8 @@ def test_workspace_tabs_default_and_select() -> None:
     assert tabs.active == "schematic"
     assert tabs.is_visible("analysis") is True
     assert tabs.is_visible("chat") is True
+    assert tabs.is_visible("pcb3d") is True
+    assert tabs.is_visible("spice") is True
     tabs.select("analysis")
     assert tabs.active == "analysis"
 

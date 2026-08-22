@@ -24,6 +24,10 @@ Item {
             return appController.showIssues
         if (tabId === "chat")
             return appController.showChat
+        if (tabId === "pcb3d")
+            return appController.showPcb3d
+        if (tabId === "spice")
+            return appController.showSpice
         return false
     }
 
@@ -96,6 +100,18 @@ Item {
                             checked: appController ? appController.showChat : false
                             onToggled: appController.setTabVisible("chat", checked)
                         }
+                        MenuItem {
+                            text: "PCB 3D"
+                            checkable: true
+                            checked: appController ? appController.showPcb3d : false
+                            onToggled: appController.setTabVisible("pcb3d", checked)
+                        }
+                        MenuItem {
+                            text: "SPICE"
+                            checkable: true
+                            checked: appController ? appController.showSpice : false
+                            onToggled: appController.setTabVisible("spice", checked)
+                        }
                     }
                 }
 
@@ -142,7 +158,9 @@ Item {
                         { "id": "schematic", "title": "Schematic" },
                         { "id": "analysis", "title": "Analysis" },
                         { "id": "issues", "title": "Issues" },
-                        { "id": "chat", "title": "Chat" }
+                        { "id": "chat", "title": "Chat" },
+                        { "id": "pcb3d", "title": "PCB 3D" },
+                        { "id": "spice", "title": "SPICE" }
                     ]
 
                     Rectangle {
@@ -218,6 +236,16 @@ Item {
                     ChatView {
                         anchors.fill: parent
                         visible: appController && appController.activeTab === "chat"
+                    }
+
+                    Pcb3dView {
+                        anchors.fill: parent
+                        visible: appController && appController.activeTab === "pcb3d"
+                    }
+
+                    SpiceView {
+                        anchors.fill: parent
+                        visible: appController && appController.activeTab === "spice"
                     }
 
                     Rectangle {

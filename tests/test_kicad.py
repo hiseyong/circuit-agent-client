@@ -8,6 +8,7 @@ from circuit_agent.kicad.client import KiCadError
 from circuit_agent.kicad.local_client import LocalKiCadClient
 from circuit_agent.kicad.mock_client import MockKiCadClient
 from circuit_agent.kicad.netlist import format_connections, parse_kicad_netlist
+from circuit_agent.kicad.pcb_render import find_board_file
 from circuit_agent.kicad.project_io import (
     attach_component_nets,
     load_project_snapshot,
@@ -76,6 +77,8 @@ async def test_mock_kicad_open_project() -> None:
     assert project.path == "/tmp/demo.kicad_pro"
     assert project.status == "open"
     assert await client.export_preview("/tmp/demo.kicad_pro") == ""
+    assert await client.export_pcb_preview("/tmp/demo.kicad_pro", "iso") == ""
+    assert await client.export_pcb_preview("/tmp/demo.kicad_pro", "iso") == ""
 
 
 @pytest.mark.asyncio
@@ -432,3 +435,14 @@ async def test_mock_kicad_apply_commands() -> None:
     assert result.project.components[-1].value == "22uF"
     reverted = await client.restore_previous()
     assert reverted.project.components[-1].value == "10uF"
+
+
+def test_find_board_file_prefers_sibling(tmp_path: Path) -> None:
+    project = tmp_path / "board.kicad_pro"
+    board = tmp_path / "board.kicad_pcb"
+    project.write_text("{}\n", encoding="utf-8")
+    board.write_text("(kicad_pcb)\n", encoding="utf-8")
+    assert find_board_file(project) == board
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert find_board_file(empty / "missing.kicad_pro") is None

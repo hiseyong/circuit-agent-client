@@ -66,6 +66,10 @@ class MockKiCadClient(KiCadClient):
         await asyncio.sleep(self.delay_seconds)
         return ""
 
+    async def export_pcb_preview(self, project_path: str, view: str = "iso") -> str:
+        await asyncio.sleep(self.delay_seconds)
+        return ""
+
     async def apply_commands(self, commands: list[dict[str, Any]]) -> CommandApplyResult:
         self._require_connected()
         await asyncio.sleep(self.delay_seconds)

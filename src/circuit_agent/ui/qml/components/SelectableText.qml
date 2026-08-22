@@ -6,7 +6,6 @@ TextEdit {
     id: root
 
     property bool markdown: false
-    property var flickable: null
 
     readOnly: true
     selectByMouse: true
@@ -18,6 +17,7 @@ TextEdit {
     selectionColor: "#3d5a80"
     font.pixelSize: 13
     activeFocusOnPress: true
+    height: contentHeight
 
     onLinkActivated: function (link) {
         Qt.openUrlExternally(link)
@@ -26,23 +26,6 @@ TextEdit {
     HoverHandler {
         enabled: root.hoveredLink.length > 0
         cursorShape: Qt.PointingHandCursor
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        acceptedButtons: Qt.LeftButton
-        propagateComposedEvents: true
-        cursorShape: root.hoveredLink.length > 0 ? Qt.PointingHandCursor : Qt.IBeamCursor
-        onPressed: function (mouse) {
-            if (root.flickable)
-                root.flickable.interactive = false
-            root.forceActiveFocus()
-            mouse.accepted = false
-        }
-        onReleased: if (root.flickable)
-            root.flickable.interactive = true
-        onCanceled: if (root.flickable)
-            root.flickable.interactive = true
     }
 
     TapHandler {

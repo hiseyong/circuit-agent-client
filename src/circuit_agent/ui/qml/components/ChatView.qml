@@ -67,57 +67,110 @@ Rectangle {
             rightMargin: 14
             topMargin: 12
             bottomMargin: 12
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
+            interactive: true
             readonly property bool agentWorking: agentController
                 && agentController.busy
                 && !agentController.awaitingDecision
 
-            onCountChanged: Qt.callLater(function () {
-                chatList.positionViewAtEnd()
-            })
-            onAgentWorkingChanged: if (agentWorking)
-                Qt.callLater(function () { chatList.positionViewAtEnd() })
+            cacheBuffer: 2000
 
-            delegate: Column {
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+            }
+
+            function minContentY() {
+                return chatList.originY
+            }
+
+            function maxContentY() {
+                return Math.max(
+                    chatList.originY,
+                    chatList.originY + chatList.contentHeight - chatList.height
+                )
+            }
+
+            function scrollBy(delta) {
+                chatList.contentY = Math.max(
+                    chatList.minContentY(),
+                    Math.min(chatList.contentY - delta, chatList.maxContentY())
+                )
+            }
+
+            function scrollToEnd() {
+                Qt.callLater(function () {
+                    chatList.forceLayout()
+                    chatList.positionViewAtEnd()
+                })
+            }
+
+            WheelHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onWheel: function (event) {
+                    const dy = event.pixelDelta.y !== 0
+                               ? event.pixelDelta.y
+                               : event.angleDelta.y
+                    chatList.scrollBy(dy)
+                    event.accepted = true
+                }
+            }
+
+            onCountChanged: chatList.scrollToEnd()
+            onContentHeightChanged: {
+                if (chatList.atYEnd)
+                    chatList.scrollToEnd()
+            }
+            onAgentWorkingChanged: if (agentWorking)
+                chatList.scrollToEnd()
+
+            delegate: Item {
                 required property string role
                 required property string content
                 required property string timestamp
                 width: chatList.width - chatList.leftMargin - chatList.rightMargin
-                spacing: 4
+                height: bubbleCol.implicitHeight
 
-                Row {
-                    spacing: 8
-                    Text {
-                        text: role === "user" ? "User" : (role === "system" ? "System" : "Agent")
-                        color: role === "user" ? "#5b9fd4" : (role === "system" ? "#e05d5d" : "#3ecf8e")
-                        font.pixelSize: 12
-                        font.weight: Font.DemiBold
+                Column {
+                    id: bubbleCol
+                    width: parent.width
+                    spacing: 4
+
+                    Row {
+                        spacing: 8
+                        Text {
+                            text: role === "user" ? "User" : (role === "system" ? "System" : "Agent")
+                            color: role === "user" ? "#5b9fd4" : (role === "system" ? "#e05d5d" : "#3ecf8e")
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                        }
+                        Text {
+                            text: timestamp
+                            color: "#6d737c"
+                            font.pixelSize: 11
+                        }
                     }
-                    Text {
-                        text: timestamp
-                        color: "#6d737c"
-                        font.pixelSize: 11
-                    }
-                }
 
-                Rectangle {
-                    width: role === "user"
-                           ? Math.min(parent.width, messageText.implicitWidth + 20)
-                           : parent.width
-                    height: messageText.contentHeight + 16
-                    radius: 6
-                    color: role === "user" ? "#223247" : (role === "system" ? "#3a2428" : "#252a33")
-                    border.color: role === "user" ? "#2f4a6a" : "#333845"
+                    Rectangle {
+                        width: role === "user"
+                               ? Math.min(parent.width, messageText.implicitWidth + 20)
+                               : parent.width
+                        height: messageText.contentHeight + 20
+                        radius: 6
+                        color: role === "user" ? "#223247" : (role === "system" ? "#3a2428" : "#252a33")
+                        border.color: role === "user" ? "#2f4a6a" : "#333845"
 
-                    SelectableText {
-                        id: messageText
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: 10
-                        text: content
-                        markdown: role !== "user"
-                        color: "#e8eaed"
-                        flickable: chatList
+                        SelectableText {
+                            id: messageText
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 10
+                            text: content
+                            markdown: role !== "user"
+                            color: "#e8eaed"
+                            onContentHeightChanged: Qt.callLater(chatList.forceLayout)
+                        }
                     }
                 }
             }

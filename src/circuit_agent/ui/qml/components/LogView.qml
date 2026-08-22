@@ -45,18 +45,37 @@ Rectangle {
             contentHeight: logText.height + 12
             boundsBehavior: Flickable.StopAtBounds
             flickableDirection: Flickable.VerticalFlick
+            interactive: true
+
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+            }
+
+            WheelHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onWheel: function (event) {
+                    const dy = event.pixelDelta.y !== 0
+                               ? event.pixelDelta.y
+                               : event.angleDelta.y
+                    const minY = logFlick.originY
+                    const maxY = Math.max(
+                        minY,
+                        logFlick.originY + logFlick.contentHeight - logFlick.height
+                    )
+                    logFlick.contentY = Math.max(minY, Math.min(logFlick.contentY - dy, maxY))
+                    event.accepted = true
+                }
+            }
 
             SelectableText {
                 id: logText
                 x: 14
                 y: 6
                 width: logFlick.width - 28
-                height: contentHeight
                 text: loggingService ? loggingService.plainText : ""
                 color: "#9aa0a6"
                 font.pixelSize: 12
                 font.family: "monospace"
-                flickable: logFlick
             }
 
             Connections {

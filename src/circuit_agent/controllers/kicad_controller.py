@@ -19,6 +19,8 @@ class KiCadController(QObject):
     connectedChanged = Signal()
     selectProjectRequested = Signal()
     schematicChanged = Signal()
+    pcbChanged = Signal()
+    pcbBusyChanged = Signal()
 
     def __init__(
         self,
@@ -35,6 +37,10 @@ class KiCadController(QObject):
         self._mode = mode
         self._connected = False
         self._schematic_path = ""
+        self._pcb_path = ""
+        self._pcb_error = ""
+        self._pcb_view = "iso"
+        self._pcb_busy = False
         self._analysis = None
 
     def bind_analysis(self, analysis_controller) -> None:
@@ -55,6 +61,24 @@ class KiCadController(QObject):
         if not self._schematic_path:
             return ""
         return QUrl.fromLocalFile(self._schematic_path).toString()
+
+    @Property(str, notify=pcbChanged)
+    def pcbUrl(self) -> str:
+        if not self._pcb_path:
+            return ""
+        return QUrl.fromLocalFile(self._pcb_path).toString()
+
+    @Property(str, notify=pcbChanged)
+    def pcbError(self) -> str:
+        return self._pcb_error
+
+    @Property(str, notify=pcbChanged)
+    def pcbView(self) -> str:
+        return self._pcb_view
+
+    @Property(bool, notify=pcbBusyChanged)
+    def pcbBusy(self) -> bool:
+        return self._pcb_busy
 
     def initialize(self) -> None:
         """Launch KiCad and ask the user to select a project if none is loaded."""
@@ -108,12 +132,63 @@ class KiCadController(QObject):
             self._analysis.on_project_loaded(project)
         logger.info("Project opened in KiCad: %s", project.path or project.name)
         self._refresh_preview(project.path)
+        self._refresh_pcb(project.path)
 
     def apply_project_update(self, project: Project) -> None:
         """Refresh the sidebar and preview after a committed schematic edit."""
 
         self._project_controller.apply_project(project)
         self._refresh_preview(project.path)
+        self._refresh_pcb(project.path)
+
+    @Slot(str)
+    def setPcbView(self, view: str) -> None:
+        name = (view or "iso").strip().lower()
+        if name not in {"iso", "top", "bottom", "front"}:
+            name = "iso"
+        if name == self._pcb_view and (self._pcb_path or self._pcb_busy):
+            return
+        self._pcb_view = name
+        self.pcbChanged.emit()
+        self._refresh_pcb(self._project_controller.projectPath)
+
+    @Slot()
+    def refreshPcb(self) -> None:
+        self._refresh_pcb(self._project_controller.projectPath)
+
+    def _refresh_pcb(self, project_path: str) -> None:
+        if self._pcb_busy:
+            return
+        if not project_path:
+            self._set_pcb("", "Open a KiCad project to render the board.")
+            return
+        self._pcb_busy = True
+        self.pcbBusyChanged.emit()
+        self._runner.submit(
+            self._client.export_pcb_preview(project_path, self._pcb_view),
+            on_success=self._on_pcb_ready,
+            on_error=self._on_pcb_error,
+        )
+
+    def _on_pcb_ready(self, path: str) -> None:
+        self._pcb_busy = False
+        self.pcbBusyChanged.emit()
+        if path:
+            self._set_pcb(path, "")
+            logger.info("PCB 3D preview ready (%s)", self._pcb_view)
+            return
+        self._set_pcb("", "This KiCad client does not render a PCB 3D preview.")
+
+    def _on_pcb_error(self, exc: BaseException) -> None:
+        self._pcb_busy = False
+        self.pcbBusyChanged.emit()
+        self._set_pcb("", str(exc))
+        logger.error("PCB 3D preview failed: %s", exc)
+
+    def _set_pcb(self, path: str, error: str) -> None:
+        self._pcb_path = path
+        self._pcb_error = error
+        self.pcbChanged.emit()
 
     def _refresh_preview(self, project_path: str) -> None:
         if not project_path:

@@ -32,6 +32,7 @@ def main() -> int:
     context.setContextProperty("agentController", application.agent_controller)
     context.setContextProperty("analysisController", application.analysis_controller)
     context.setContextProperty("kicadController", application.kicad_controller)
+    context.setContextProperty("spiceController", application.spice_controller)
     context.setContextProperty("loggingService", application.logging_service)
 
     engine.load(QUrl.fromLocalFile(str(qml_dir / "Main.qml")))
