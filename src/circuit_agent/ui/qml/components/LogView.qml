@@ -51,6 +51,7 @@ Rectangle {
                 x: 14
                 y: 6
                 width: logFlick.width - 28
+                height: contentHeight
                 text: loggingService ? loggingService.plainText : ""
                 color: "#9aa0a6"
                 font.pixelSize: 12

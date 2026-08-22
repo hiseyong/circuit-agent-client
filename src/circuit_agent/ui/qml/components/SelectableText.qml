@@ -18,7 +18,6 @@ TextEdit {
     selectionColor: "#3d5a80"
     font.pixelSize: 13
     activeFocusOnPress: true
-    implicitHeight: contentHeight
 
     onLinkActivated: function (link) {
         Qt.openUrlExternally(link)
