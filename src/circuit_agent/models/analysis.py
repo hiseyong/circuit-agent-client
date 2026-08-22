@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from circuit_agent.models.issue import CircuitIssue
 from circuit_agent.models.project import Component
 
 
@@ -23,6 +24,7 @@ class RevisionStatus(str, Enum):
     PENDING = "pending"
     ACCEPTED = "accepted"
     REJECTED = "rejected"
+    REVERTED = "reverted"
 
 
 class CircuitNet(BaseModel):
@@ -33,10 +35,11 @@ class CircuitNet(BaseModel):
 
 
 class CircuitSnapshot(BaseModel):
-    """Project parts and nets the backend will analyze later."""
+    """Project parts and nets sent to POST /v1/circuit/analyze."""
 
     project_name: str
     project_path: str = ""
+    project_id: str = ""
     components: list[Component] = Field(default_factory=list)
     connections: list[CircuitNet] = Field(default_factory=list)
 
@@ -50,6 +53,8 @@ class CircuitRevision(BaseModel):
     summary: str = ""
     status: RevisionStatus = RevisionStatus.INFO
     timestamp: datetime = Field(default_factory=datetime.now)
+    commands: list[dict] = Field(default_factory=list)
+    issue: CircuitIssue | None = None
 
 
 class CircuitAnalysis(BaseModel):
@@ -57,7 +62,32 @@ class CircuitAnalysis(BaseModel):
 
     purpose: str = ""
     summary: str = ""
+    project_id: str = ""
     revisions: list[CircuitRevision] = Field(default_factory=list)
+    issues: list[CircuitIssue] = Field(default_factory=list)
+
+
+def render_project_state(snapshot: CircuitSnapshot) -> tuple[str, str]:
+    """Format the snapshot the same way the server prompt expects."""
+
+    component_lines = [f"[components] {len(snapshot.components)} part(s)"]
+    for component in snapshot.components:
+        fields = [f"  {component.reference}", component.value or component.part_number or "-"]
+        if component.part_number:
+            fields.append(f"mpn={component.part_number}")
+        if component.manufacturer:
+            fields.append(f"mfr={component.manufacturer}")
+        if component.lib_id:
+            fields.append(f"lib={component.lib_id}")
+        if component.nets:
+            fields.append(f"nets={component.nets}")
+        component_lines.append("  ".join(fields))
+
+    connection_lines = [f"[connections] {len(snapshot.connections)} net(s)"]
+    connection_lines.extend(
+        f"  {net.name}: {', '.join(net.pins)}" for net in snapshot.connections
+    )
+    return "\n".join(component_lines), "\n".join(connection_lines)
 
 
 def connections_from_raw(raw: list[dict]) -> list[CircuitNet]:

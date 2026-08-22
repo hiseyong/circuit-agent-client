@@ -1,3 +1,4 @@
+from circuit_agent.application.qt_models import LogListModel
 from circuit_agent.models.agent import AgentReply, ChatMessage, ChatRole
 from circuit_agent.models.analysis import (
     CircuitAnalysis,
@@ -93,6 +94,23 @@ def test_circuit_issue_creation() -> None:
     assert issue.evidence[0].page == 8
 
 
+def test_solve_issue_prompt_asks_for_a_schematic_fix() -> None:
+    from circuit_agent.controllers.agent_controller import solve_issue_prompt
+
+    issue = CircuitIssue(
+        severity=IssueSeverity.ERROR,
+        reference="C1",
+        title="Polarized capacitor on AC node",
+        description="Replace C1 with a non-polarized capacitor.",
+        source="Schematic review",
+    )
+    prompt = solve_issue_prompt(issue)
+    assert "error" in prompt
+    assert "C1" in prompt
+    assert "non-polarized" in prompt
+    assert "add_component" in prompt
+
+
 def test_circuit_snapshot_and_analysis() -> None:
     snapshot = CircuitSnapshot(
         project_name="buck",
@@ -125,3 +143,12 @@ def test_connections_from_raw_accepts_kicad_and_mock_shapes() -> None:
     assert nets[0].name == "GND"
     assert nets[0].pins == ["U1.GND", "C1.2"]
     assert nets[1].pins == ["U1.EN", "R1.1"]
+
+
+def test_log_list_plain_text_includes_levels() -> None:
+    model = LogListModel()
+    model.append("INFO", "opened project")
+    model.append("ERROR", "apply failed")
+    text = model.plain_text()
+    assert "opened project" in text
+    assert "ERROR apply failed" in text

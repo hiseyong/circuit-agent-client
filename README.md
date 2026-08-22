@@ -73,7 +73,7 @@ The following are **not implemented**. External functionality is mocked:
 - DigiKey API / MCP
 - Upstage document processing
 - RAG / datasheet retrieval and parsing
-- SPICE / circuit simulation
+- Full KiCad Simulator GUI / IPC control (local SPICE uses `kicad-cli --format spice` plus bundled libngspice)
 - FMEA and automatic circuit design or modification
 - Real KiCad IPC (the app launches KiCad and opens a project file; it does not talk to KiCad over IPC yet)
 - Authentication and user accounts

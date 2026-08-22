@@ -14,6 +14,8 @@ Rectangle {
             return "#3ecf8e"
         if (status === "rejected")
             return "#e05d5d"
+        if (status === "reverted")
+            return "#9aa0a6"
         return "#5b9fd4"
     }
 
@@ -24,6 +26,8 @@ Rectangle {
             return "COMMITTED"
         if (status === "rejected")
             return "REJECTED"
+        if (status === "reverted")
+            return "REVERTED"
         return "INFO"
     }
 
@@ -271,6 +275,33 @@ Rectangle {
                                     color: "#c5cad3"
                                     font.pixelSize: 12
                                     wrapMode: Text.Wrap
+                                }
+
+                                Row {
+                                    visible: !pending && analysisController
+                                             && revisionId === analysisController.revertableRevisionId
+                                    spacing: 8
+                                    topPadding: 4
+
+                                    Button {
+                                        text: "Revert"
+                                        onClicked: analysisController.revertLatest()
+                                        background: Rectangle {
+                                            color: parent.down ? "#3a2428" : (parent.hovered ? "#4a2c31" : "#2c3340")
+                                            border.color: "#5a3338"
+                                            radius: 4
+                                        }
+                                        contentItem: Text {
+                                            text: parent.text
+                                            color: "#e8eaed"
+                                            font.pixelSize: 12
+                                            font.weight: Font.DemiBold
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        implicitWidth: 64
+                                        implicitHeight: 24
+                                    }
                                 }
 
                                 Row {

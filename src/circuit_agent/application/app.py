@@ -11,6 +11,7 @@ from circuit_agent.application.config import AppConfig
 from circuit_agent.application.state import WorkspaceTabs
 from circuit_agent.backend.client import BackendClient
 from circuit_agent.backend.mock_client import MockBackendClient
+from circuit_agent.backend.remote_client import RemoteBackendClient
 from circuit_agent.controllers.agent_controller import AgentController
 from circuit_agent.controllers.analysis_controller import AnalysisController
 from circuit_agent.controllers.kicad_controller import KiCadController
@@ -28,11 +29,13 @@ class AppController(QObject):
 
     tabsChanged = Signal()
     activeTabChanged = Signal()
+    serverChanged = Signal()
 
     def __init__(self, config: AppConfig, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._config = config
         self._tabs = WorkspaceTabs()
+        self._server_ok = False
 
     @Property(str, constant=True)
     def title(self) -> str:
@@ -46,13 +49,21 @@ class AppController(QObject):
     def kicadMode(self) -> str:
         return self._config.kicad_mode
 
-    @Property(str, constant=True)
+    @Property(str, notify=serverChanged)
     def serverStatus(self) -> str:
-        return "MOCK" if self._config.backend_mode == "mock" else "DISCONNECTED"
+        if self._config.backend_mode == "mock":
+            return "MOCK"
+        return "CONNECTED" if self._server_ok else "DISCONNECTED"
 
-    @Property(bool, constant=True)
+    @Property(bool, notify=serverChanged)
     def serverConnected(self) -> bool:
-        return False
+        return self._server_ok if self._config.backend_mode == "remote" else False
+
+    def set_server_ok(self, ok: bool) -> None:
+        if self._server_ok == ok:
+            return
+        self._server_ok = ok
+        self.serverChanged.emit()
 
     @Property(str, notify=activeTabChanged)
     def activeTab(self) -> str:
@@ -93,6 +104,8 @@ class AppController(QObject):
 def create_backend_client(config: AppConfig) -> BackendClient:
     if config.backend_mode == "mock":
         return MockBackendClient()
+    if config.backend_mode == "remote":
+        return RemoteBackendClient(base_url=config.backend_url)
     raise ValueError(f"Unsupported backend mode: {config.backend_mode}")
 
 
@@ -128,14 +141,33 @@ class Application:
         )
         self.project_controller.bind_kicad(self.kicad_controller)
         self.kicad_controller.bind_analysis(self.analysis_controller)
+        self.analysis_controller.bind_ui(
+            self.app_controller,
+            self.agent_controller,
+            self.kicad_controller,
+        )
+        self.agent_controller.bind_context(self.analysis_controller, self.kicad)
 
         logger.info("Application started")
-        logger.info("Mock backend initialized")
+        if self.config.backend_mode == "remote":
+            logger.info("Remote backend: %s", self.config.backend_url)
+        else:
+            logger.info("Mock backend initialized")
         if self.config.kicad_mode == "local":
             logger.info("Local KiCad client initialized")
         else:
             logger.info("Mock KiCad client initialized")
+        self.async_runner.submit(
+            self.backend.health(),
+            on_success=lambda ok: self.app_controller.set_server_ok(bool(ok)),
+            on_error=lambda exc: self._on_health_error(exc),
+        )
         self.kicad_controller.initialize()
 
+    def _on_health_error(self, exc: BaseException) -> None:
+        self.app_controller.set_server_ok(False)
+        logger.error("Backend health check failed: %s", exc)
+
     def shutdown(self) -> None:
+        self.analysis_controller.persist_session()
         self.async_runner.stop()

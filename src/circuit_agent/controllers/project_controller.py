@@ -160,6 +160,7 @@ class ProjectController(QObject):
 
     @Slot(str)
     def openProject(self, path: str) -> None:
+        logger.info("Open project requested: %s", path)
         resolved = normalize_path(path)
         if not resolved:
             logger.warning("Open project ignored: empty path")

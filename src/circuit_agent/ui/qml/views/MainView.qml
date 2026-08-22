@@ -219,6 +219,42 @@ Item {
                         anchors.fill: parent
                         visible: appController && appController.activeTab === "chat"
                     }
+
+                    Rectangle {
+                        id: analysisLoading
+                        anchors.fill: parent
+                        visible: analysisController && analysisController.analyzing
+                        color: "#cc16181d"
+                        z: 100
+
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 14
+
+                            BusyIndicator {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                running: analysisLoading.visible
+                            }
+
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "Analyzing circuit"
+                                color: "#e8eaed"
+                                font.pixelSize: 18
+                                font.weight: Font.DemiBold
+                            }
+
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 360
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                                text: "Sending components and connections to the server. You can still open another project from the sidebar."
+                                color: "#9aa0a6"
+                                font.pixelSize: 13
+                            }
+                        }
+                    }
                 }
             }
 

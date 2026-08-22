@@ -77,6 +77,7 @@ Rectangle {
             model: agentController ? agentController.issueModel : null
 
             delegate: Rectangle {
+                required property int index
                 required property string severity
                 required property string title
                 required property string description
@@ -108,7 +109,8 @@ Rectangle {
                     anchors.leftMargin: 16
                     spacing: 6
 
-                    Row {
+                    RowLayout {
+                        width: parent.width
                         spacing: 8
 
                         Text {
@@ -124,6 +126,57 @@ Rectangle {
                             color: "#c5cad3"
                             font.pixelSize: 12
                             font.family: "monospace"
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Button {
+                            text: "Dismiss"
+                            onClicked: agentController.dismissIssueAt(index)
+                            background: Rectangle {
+                                color: parent.down ? "#3a2428" : "#2c3340"
+                                border.color: "#5a3338"
+                                radius: 4
+                            }
+                            contentItem: Text {
+                                text: parent.text
+                                color: "#e8eaed"
+                                font.pixelSize: 11
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            implicitWidth: 72
+                            implicitHeight: 22
+                        }
+
+                        Button {
+                            text: "Solve"
+                            enabled: agentController
+                                     && !agentController.busy
+                                     && !agentController.awaitingDecision
+                                     && analysisController
+                                     && analysisController.projectId.length > 0
+                            onClicked: {
+                                agentController.solveIssueAt(index)
+                                if (appController)
+                                    appController.selectTab("chat")
+                            }
+                            background: Rectangle {
+                                color: parent.enabled
+                                       ? (parent.down ? "#2f7a52" : "#2d6b4f")
+                                       : "#2a303b"
+                                radius: 4
+                            }
+                            contentItem: Text {
+                                text: parent.text
+                                color: parent.enabled ? "#ffffff" : "#6d737c"
+                                font.pixelSize: 11
+                                font.weight: Font.DemiBold
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            implicitWidth: 64
+                            implicitHeight: 22
                         }
                     }
 

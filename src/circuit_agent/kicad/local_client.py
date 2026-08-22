@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from circuit_agent.kicad.client import KiCadClient, KiCadError
+from circuit_agent.kicad.client import CommandApplyResult, KiCadClient, KiCadError
 from circuit_agent.kicad.netlist import dump_connections, export_schematic_netlist
 from circuit_agent.kicad.paths import find_kicad
 from circuit_agent.kicad.preview import export_schematic_svg
@@ -17,7 +17,10 @@ from circuit_agent.kicad.project_io import (
     load_project_snapshot,
     write_empty_project,
 )
+from circuit_agent.kicad.schematic_edit import apply_schematic_commands
+from circuit_agent.kicad.spice import simulate_schematic
 from circuit_agent.models.project import Component, Project
+from circuit_agent.models.spice import SpiceRequest, SpiceResult
 
 Launcher = Callable[[Path, Path | None], Awaitable[None]]
 Finder = Callable[[], Path | None]
@@ -114,6 +117,48 @@ class LocalKiCadClient(KiCadClient):
         preview = await asyncio.to_thread(export_schematic_svg, schematic)
         return str(preview)
 
+    async def apply_commands(self, commands: list[dict[str, Any]]) -> CommandApplyResult:
+        self._require_connected()
+        if self._project is None or not self._project.path:
+            raise KiCadError("Open a project before applying schematic edits.")
+        project_path = Path(self._project.path)
+        schematic = project_path.with_suffix(".kicad_sch")
+        await asyncio.to_thread(_snapshot_for_revert, schematic)
+        edit = await asyncio.to_thread(apply_schematic_commands, schematic, commands)
+        return self._reload_project(project_path, edit.applied, edit.skipped)
+
+    async def run_spice(self, request: SpiceRequest) -> SpiceResult:
+        self._require_connected()
+        if self._project is None or not self._project.path:
+            raise KiCadError("Open a project before running SPICE.")
+        schematic = Path(self._project.path).with_suffix(".kicad_sch")
+        return await asyncio.to_thread(simulate_schematic, schematic, request)
+
+    async def restore_previous(self) -> CommandApplyResult:
+        self._require_connected()
+        if self._project is None or not self._project.path:
+            raise KiCadError("Open a project before reverting a schematic edit.")
+        project_path = Path(self._project.path)
+        schematic = project_path.with_suffix(".kicad_sch")
+        await asyncio.to_thread(_restore_revert_snapshot, schematic)
+        return self._reload_project(project_path, ["revert"], [])
+
+    def _reload_project(
+        self,
+        project_path: Path,
+        applied: list[str],
+        skipped: list[str],
+    ) -> CommandApplyResult:
+        snapshot = load_project_snapshot(project_path)
+        self._project = snapshot
+        self._load_and_dump_connections(project_path)
+        attach_component_nets(snapshot.components, self._connections)
+        return CommandApplyResult(
+            project=snapshot.model_copy(deep=True),
+            applied=applied,
+            skipped=skipped,
+        )
+
     def _load_and_dump_connections(self, project_path: Path) -> None:
         schematic = project_path.with_suffix(".kicad_sch")
         try:
@@ -127,3 +172,24 @@ class LocalKiCadClient(KiCadClient):
     def _require_connected(self) -> None:
         if not self._connected:
             raise KiCadError("KiCad client is not connected.")
+
+
+def revert_snapshot_path(schematic: Path) -> Path:
+    return schematic.with_name(schematic.name + ".revert")
+
+
+def _snapshot_for_revert(schematic: Path) -> None:
+    if not schematic.exists():
+        return
+    revert_snapshot_path(schematic).write_text(
+        schematic.read_text(encoding="utf-8", errors="replace"),
+        encoding="utf-8",
+    )
+
+
+def _restore_revert_snapshot(schematic: Path) -> None:
+    revert = revert_snapshot_path(schematic)
+    if not revert.exists():
+        raise KiCadError("No committed schematic edit to revert.")
+    schematic.write_text(revert.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+    revert.unlink()

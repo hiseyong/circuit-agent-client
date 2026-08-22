@@ -52,6 +52,14 @@ class ChatListModel(QAbstractListModel):
         self._items.append(message)
         self.endInsertRows()
 
+    def reset_from(self, messages: list[ChatMessage]) -> None:
+        self.beginResetModel()
+        self._items = list(messages)
+        self.endResetModel()
+
+    def snapshot(self) -> list[ChatMessage]:
+        return list(self._items)
+
 
 class ComponentListModel(QAbstractListModel):
     ReferenceRole = Qt.ItemDataRole.UserRole + 1
@@ -233,6 +241,38 @@ class IssueListModel(QAbstractListModel):
         self._items = list(issues)
         self.endResetModel()
 
+    def at(self, row: int) -> CircuitIssue | None:
+        if 0 <= row < len(self._items):
+            return self._items[row]
+        return None
+
+    def remove_at(self, row: int) -> CircuitIssue | None:
+        issue = self.at(row)
+        if issue is None:
+            return None
+        self.beginRemoveRows(QModelIndex(), row, row)
+        del self._items[row]
+        self.endRemoveRows()
+        return issue
+
+    def append(self, issue: CircuitIssue) -> None:
+        if self.contains(issue):
+            return
+        row = len(self._items)
+        self.beginInsertRows(QModelIndex(), row, row)
+        self._items.append(issue)
+        self.endInsertRows()
+
+    def contains(self, issue: CircuitIssue) -> bool:
+        return any(_same_issue(item, issue) for item in self._items)
+
+    def snapshot(self) -> list[CircuitIssue]:
+        return list(self._items)
+
+
+def _same_issue(left: CircuitIssue, right: CircuitIssue) -> bool:
+    return left.reference == right.reference and left.title == right.title
+
 
 class HistoryListModel(QAbstractListModel):
     IdRole = Qt.ItemDataRole.UserRole + 1
@@ -303,6 +343,9 @@ class HistoryListModel(QAbstractListModel):
     def pending_count(self) -> int:
         return sum(1 for item in self._items if item.status.value == "pending")
 
+    def snapshot(self) -> list[CircuitRevision]:
+        return list(self._items)
+
     def notify_row(self, revision_id: str) -> None:
         for row, item in enumerate(self._items):
             if item.id == revision_id:
@@ -356,3 +399,13 @@ class LogListModel(QAbstractListModel):
         self.beginInsertRows(QModelIndex(), row, row)
         self._items.append((datetime.now(), level, message))
         self.endInsertRows()
+
+    def plain_text(self) -> str:
+        lines: list[str] = []
+        for timestamp, level, message in self._items:
+            time_text = timestamp.strftime("%H:%M:%S")
+            if level in {"WARNING", "ERROR"}:
+                lines.append(f"[{time_text}] {level} {message}")
+            else:
+                lines.append(f"[{time_text}] {message}")
+        return "\n".join(lines)

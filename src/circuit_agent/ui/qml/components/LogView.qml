@@ -36,31 +36,35 @@ Rectangle {
             }
         }
 
-        ListView {
-            id: logList
+        Flickable {
+            id: logFlick
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            model: loggingService ? loggingService.logModel : null
-            leftMargin: 14
-            rightMargin: 14
-            topMargin: 6
-            bottomMargin: 6
-            spacing: 2
+            contentWidth: width
+            contentHeight: logText.height + 12
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
 
-            onCountChanged: Qt.callLater(function () {
-                logList.positionViewAtEnd()
-            })
-
-            delegate: Text {
-                required property string line
-                required property string level
-                width: logList.width - logList.leftMargin - logList.rightMargin
-                text: line
-                color: level === "ERROR" ? "#e05d5d" : (level === "WARNING" ? "#e6b84d" : "#9aa0a6")
+            SelectableText {
+                id: logText
+                x: 14
+                y: 6
+                width: logFlick.width - 28
+                text: loggingService ? loggingService.plainText : ""
+                color: "#9aa0a6"
                 font.pixelSize: 12
                 font.family: "monospace"
-                wrapMode: Text.Wrap
+                flickable: logFlick
+            }
+
+            Connections {
+                target: loggingService
+                function onLogAdded() {
+                    Qt.callLater(function () {
+                        logFlick.contentY = Math.max(0, logFlick.contentHeight - logFlick.height)
+                    })
+                }
             }
         }
     }

@@ -109,6 +109,12 @@ class KiCadController(QObject):
         logger.info("Project opened in KiCad: %s", project.path or project.name)
         self._refresh_preview(project.path)
 
+    def apply_project_update(self, project: Project) -> None:
+        """Refresh the sidebar and preview after a committed schematic edit."""
+
+        self._project_controller.apply_project(project)
+        self._refresh_preview(project.path)
+
     def _refresh_preview(self, project_path: str) -> None:
         if not project_path:
             self._set_schematic_path("")

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Basic
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtQuick.Window
 
 Rectangle {
     id: root
@@ -11,8 +12,20 @@ Rectangle {
     property int bubbleAnchorIndex: -1
     property real bubbleAnchorY: 0
 
+    function chosenFile(dialog) {
+        if (dialog.selectedFile && dialog.selectedFile.toString().length > 0)
+            return dialog.selectedFile.toString()
+        if (dialog.selectedFiles && dialog.selectedFiles.length > 0)
+            return dialog.selectedFiles[0].toString()
+        return ""
+    }
+
     function openProjectDialog() {
-        openDialog.open()
+        const window = root.Window.window
+        if (window)
+            window.requestActivate()
+        openDialog.close()
+        Qt.callLater(function () { openDialog.open() })
     }
 
     function placeBubble(row) {
@@ -86,15 +99,20 @@ Rectangle {
     Connections {
         target: kicadController
         function onSelectProjectRequested() {
-            openDialog.open()
+            root.openProjectDialog()
         }
     }
 
     FileDialog {
         id: openDialog
         title: "Select KiCad Project"
+        fileMode: FileDialog.OpenFile
         nameFilters: ["KiCad projects (*.kicad_pro)", "All files (*)"]
-        onAccepted: projectController.openProject(selectedFile.toString())
+        onAccepted: {
+            const path = root.chosenFile(openDialog)
+            console.log("Open project selected:", path)
+            projectController.openProject(path)
+        }
     }
 
     FileDialog {
@@ -103,7 +121,7 @@ Rectangle {
         fileMode: FileDialog.SaveFile
         nameFilters: ["KiCad projects (*.kicad_pro)"]
         defaultSuffix: "kicad_pro"
-        onAccepted: projectController.newProject(selectedFile.toString())
+        onAccepted: projectController.newProject(root.chosenFile(newDialog))
     }
 
     ColumnLayout {

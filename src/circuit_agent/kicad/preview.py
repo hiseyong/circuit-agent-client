@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 
 from circuit_agent.kicad.client import KiCadError
@@ -19,7 +20,11 @@ def export_schematic_svg(schematic_path: Path, output_dir: Path | None = None) -
     if cli is None:
         raise KiCadError("kicad-cli was not found. Cannot export a schematic preview.")
 
-    destination = output_dir or Path(tempfile.gettempdir()) / "circuit-agent-preview" / schematic_path.stem
+    destination = output_dir or (
+        Path(tempfile.gettempdir())
+        / "circuit-agent-preview"
+        / f"{schematic_path.stem}-{uuid.uuid4().hex[:8]}"
+    )
     destination.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
         [
