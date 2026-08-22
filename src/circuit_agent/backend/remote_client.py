@@ -144,6 +144,8 @@ def issue_payload(issue: CircuitIssue) -> dict[str, Any]:
         }
         if item.page is not None and item.page >= 1:
             entry["page"] = item.page
+        if item.url:
+            entry["datasheet_url"] = item.url
         if item.confidence is not None:
             entry["confidence"] = item.confidence
         if item.metadata:

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from circuit_agent.models.evidence import Evidence
+
+_REF_TOKEN = re.compile(r"\b([A-Z]{1,4}\d{1,4}(?:[A-Z]\d*)?)\b")
+_REF_SPLIT = re.compile(r"[,;/|]+")
 
 
 class IssueSeverity(str, Enum):
@@ -58,4 +62,31 @@ def format_issue_refresh(result: IssueRefreshResult) -> str:
             f"- {change.action} [{change.issue.severity.value}] {ref}: "
             f"{change.issue.title}{reason}"
         )
-    return "\n".join(lines)
+        return "\n".join(lines)
+
+
+def parse_issue_references(
+    issue: CircuitIssue, known: set[str] | None = None
+) -> list[str]:
+    """Collect schematic references named by an issue (e.g. D4, D5, D6)."""
+
+    found: list[str] = []
+    for part in _REF_SPLIT.split(issue.reference or ""):
+        token = part.strip()
+        if not token:
+            continue
+        if _REF_TOKEN.fullmatch(token):
+            found.append(token)
+        else:
+            found.extend(_REF_TOKEN.findall(token))
+    if known:
+        haystack = f"{issue.title}\n{issue.description}"
+        found.extend(token for token in _REF_TOKEN.findall(haystack) if token in known)
+    unique: list[str] = []
+    seen: set[str] = set()
+    for token in found:
+        if token in seen:
+            continue
+        seen.add(token)
+        unique.append(token)
+    return unique

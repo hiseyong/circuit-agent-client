@@ -10,7 +10,7 @@ from circuit_agent.models.analysis import (
     connections_from_raw,
 )
 from circuit_agent.models.evidence import Evidence, evidence_card, evidence_from_payload
-from circuit_agent.models.issue import CircuitIssue, IssueSeverity
+from circuit_agent.models.issue import CircuitIssue, IssueSeverity, parse_issue_references
 from circuit_agent.models.project import Component, Project
 
 
@@ -78,9 +78,26 @@ def test_evidence_card_includes_source_and_original_json() -> None:
     assert card["source"] == "Manufacturer Datasheet"
     assert card["location"] == "p.8  ·  Input Voltage"
     assert card["confidence"] == "92%"
-    assert "url: https://example.com/tps62160.pdf" in card["extras"]
+    assert card["url"] == "https://example.com/tps62160.pdf"
+    assert card["canOpen"] is True
+    assert card["pageNumber"] == 8
     assert '"page": 8' in card["json"]
     assert "tps62160.pdf" in card["json"]
+
+
+def test_evidence_reads_datasheet_url_field() -> None:
+    evidence = evidence_from_payload(
+        {
+            "source": "Manufacturer Datasheet",
+            "document": "Cached datasheet extract",
+            "page": 5,
+            "section": "Input Voltage",
+            "content": "3.0 V – 17 V",
+            "datasheet_url": "https://datasheets.test/TPS62160.pdf",
+        }
+    )
+    assert evidence.url == "https://datasheets.test/TPS62160.pdf"
+    assert evidence_card(evidence)["canOpen"] is True
 
 
 def test_chat_message_and_reply_defaults() -> None:
@@ -118,6 +135,19 @@ def test_circuit_issue_creation() -> None:
     assert issue.reference == "U1"
     assert "3.0 V" in issue.description
     assert issue.evidence[0].page == 8
+
+
+def test_parse_issue_references_splits_and_reads_known_mentions() -> None:
+    issue = CircuitIssue(
+        severity=IssueSeverity.WARNING,
+        reference="D4, D5, D6",
+        title="LED chain D4–D6 brightness",
+        description="Check D4 D5 D6 and also R9 if the series current is high.",
+        source="Datasheet review",
+    )
+    assert parse_issue_references(issue) == ["D4", "D5", "D6"]
+    assert parse_issue_references(issue, {"D4", "D5", "D6", "R9"}) == ["D4", "D5", "D6", "R9"]
+    assert parse_issue_references(issue, {"D4", "D5", "D6"}) == ["D4", "D5", "D6"]
 
 
 def test_solve_issue_prompt_asks_for_a_schematic_fix() -> None:

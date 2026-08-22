@@ -9,7 +9,7 @@ from PySide6.QtCore import QAbstractListModel, QModelIndex, Qt
 from circuit_agent.models.agent import ChatMessage
 from circuit_agent.models.analysis import CircuitRevision
 from circuit_agent.models.evidence import Evidence, evidence_card
-from circuit_agent.models.issue import CircuitIssue
+from circuit_agent.models.issue import CircuitIssue, parse_issue_references
 from circuit_agent.models.project import Component
 
 
@@ -133,6 +133,9 @@ class ComponentListModel(QAbstractListModel):
                 return item
         return None
 
+    def references(self) -> set[str]:
+        return {item.reference for item in self._items}
+
 
 class EvidenceListModel(QAbstractListModel):
     SourceRole = Qt.ItemDataRole.UserRole + 1
@@ -192,10 +195,14 @@ class IssueListModel(QAbstractListModel):
     ReferenceRole = Qt.ItemDataRole.UserRole + 4
     SourceRole = Qt.ItemDataRole.UserRole + 5
     EvidenceRole = Qt.ItemDataRole.UserRole + 6
+    HighlightedRole = Qt.ItemDataRole.UserRole + 7
+    TargetsRole = Qt.ItemDataRole.UserRole + 8
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._items: list[CircuitIssue] = []
+        self._highlighted: set[tuple[str, str]] = set()
+        self._known_refs = lambda: set()
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
         if parent.isValid():
@@ -218,6 +225,10 @@ class IssueListModel(QAbstractListModel):
             return item.source
         if role == self.EvidenceRole:
             return [evidence_card(entry) for entry in item.evidence]
+        if role == self.HighlightedRole:
+            return _issue_key(item) in self._highlighted
+        if role == self.TargetsRole:
+            return parse_issue_references(item, self._known_refs())
         return None
 
     def roleNames(self) -> dict[int, bytes]:  # noqa: N802
@@ -228,11 +239,52 @@ class IssueListModel(QAbstractListModel):
             self.ReferenceRole: b"reference",
             self.SourceRole: b"source",
             self.EvidenceRole: b"evidence",
+            self.HighlightedRole: b"highlighted",
+            self.TargetsRole: b"highlightTargets",
         }
+
+    def set_known_refs(self, getter) -> None:
+        self._known_refs = getter
+
+    def toggle_highlight(self, row: int) -> bool:
+        issue = self.at(row)
+        if issue is None:
+            return False
+        key = _issue_key(issue)
+        if key in self._highlighted:
+            self._highlighted.discard(key)
+        else:
+            self._highlighted.add(key)
+        index = self.index(row, 0)
+        self.dataChanged.emit(index, index, [self.HighlightedRole])
+        return key in self._highlighted
+
+    def highlighted_references(self) -> list[str]:
+        known = self._known_refs()
+        refs: list[str] = []
+        seen: set[str] = set()
+        for issue in self._items:
+            if _issue_key(issue) not in self._highlighted:
+                continue
+            for token in parse_issue_references(issue, known):
+                if token in seen:
+                    continue
+                seen.add(token)
+                refs.append(token)
+        return refs
+
+    def refresh_targets(self) -> None:
+        if not self._items:
+            return
+        first = self.index(0, 0)
+        last = self.index(len(self._items) - 1, 0)
+        self.dataChanged.emit(first, last, [self.TargetsRole])
 
     def reset_from(self, issues: list[CircuitIssue]) -> None:
         self.beginResetModel()
         self._items = list(issues)
+        keep = {_issue_key(item) for item in self._items}
+        self._highlighted = {key for key in self._highlighted if key in keep}
         self.endResetModel()
 
     def at(self, row: int) -> CircuitIssue | None:
@@ -245,6 +297,7 @@ class IssueListModel(QAbstractListModel):
         if issue is None:
             return None
         self.beginRemoveRows(QModelIndex(), row, row)
+        self._highlighted.discard(_issue_key(issue))
         del self._items[row]
         self.endRemoveRows()
         return issue
@@ -264,8 +317,12 @@ class IssueListModel(QAbstractListModel):
         return list(self._items)
 
 
+def _issue_key(issue: CircuitIssue) -> tuple[str, str]:
+    return (issue.reference, issue.title)
+
+
 def _same_issue(left: CircuitIssue, right: CircuitIssue) -> bool:
-    return left.reference == right.reference and left.title == right.title
+    return _issue_key(left) == _issue_key(right)
 
 
 class HistoryListModel(QAbstractListModel):

@@ -8,6 +8,7 @@ from circuit_agent.controllers.agent_controller import AgentController
 from circuit_agent.controllers.analysis_controller import AnalysisController
 from circuit_agent.models.agent import ChatMessage, ChatRole
 from circuit_agent.models.analysis import CircuitRevision, RevisionKind, RevisionStatus
+from circuit_agent.models.issue import CircuitIssue, IssueSeverity
 from circuit_agent.models.project import Component, Project
 from circuit_agent.services.session_store import (
     ProjectSession,
@@ -146,3 +147,23 @@ def test_dismiss_issue_removes_it_without_a_chat_turn(qapp: QCoreApplication) ->
     assert agent.chatModel.rowCount() == chat_before
     agent.dismissIssueAt(99)
     assert agent.issueCount == start - 1
+
+
+def test_issue_highlight_switch_collects_schematic_refs(qapp: QCoreApplication) -> None:
+    agent = AgentController(MockBackendClient(delay_seconds=0.0), ImmediateRunner())
+    agent.apply_issues(
+        [
+            CircuitIssue(
+                severity=IssueSeverity.WARNING,
+                reference="D4, D5, D6",
+                title="LED string",
+                description="Check the LED current.",
+                source="Schematic review",
+            )
+        ]
+    )
+    assert agent.schematicHighlightRefs == []
+    agent.toggleIssueHighlightAt(0)
+    assert agent.schematicHighlightRefs == ["D4", "D5", "D6"]
+    agent.toggleIssueHighlightAt(0)
+    assert agent.schematicHighlightRefs == []

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Basic
 import "views"
+import "components"
 
 ApplicationWindow {
     id: root
@@ -16,4 +17,6 @@ ApplicationWindow {
     MainView {
         anchors.fill: parent
     }
+
+    PdfPreviewPopup {}
 }

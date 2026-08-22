@@ -27,6 +27,8 @@ Rectangle {
     }
     readonly property int renderW: rasterScale > 0 ? Math.max(1, Math.round(nativeW * rasterScale)) : 0
     readonly property int renderH: rasterScale > 0 ? Math.max(1, Math.round(nativeH * rasterScale)) : 0
+    readonly property real baseW: nativeReady ? nativeW : Math.max(1, preview.implicitWidth)
+    readonly property real baseH: nativeReady ? nativeH : Math.max(1, preview.implicitHeight)
 
     function fitZoom() {
         if (!nativeReady || nativeW <= 0 || nativeH <= 0 || flick.width <= 0 || flick.height <= 0)
@@ -48,6 +50,13 @@ Rectangle {
         flick.contentY = Math.max(0, cy * scale - oy)
     }
 
+    function zoomAt(deltaY, originX, originY) {
+        const dy = deltaY
+        if (dy === 0)
+            return
+        setZoom(zoom * (dy > 0 ? 1.15 : 1 / 1.15), originX, originY)
+    }
+
     function centerContent() {
         flick.contentX = Math.max(0, (flick.contentWidth - flick.width) / 2)
         flick.contentY = Math.max(0, (flick.contentHeight - flick.height) / 2)
@@ -62,6 +71,19 @@ Rectangle {
     function applyDefaultZoom() {
         zoom = Math.min(maxZoom, Math.max(1, fitZoom() * defaultZoomBoost))
         Qt.callLater(root.centerContent)
+    }
+
+    function captureNativeSize() {
+        if (nativeReady || preview.status !== Image.Ready)
+            return
+        const w = preview.implicitWidth > 1 ? preview.implicitWidth : preview.paintedWidth
+        const h = preview.implicitHeight > 1 ? preview.implicitHeight : preview.paintedHeight
+        if (w <= 1 || h <= 1)
+            return
+        nativeW = w
+        nativeH = h
+        nativeReady = true
+        Qt.callLater(root.applyDefaultZoom)
     }
 
     function resetNative() {
@@ -161,95 +183,123 @@ Rectangle {
             Layout.fillHeight: true
             color: "#efe7d6"
 
-            Flickable {
-                id: flick
+            Item {
+                id: viewport
                 anchors.fill: parent
                 anchors.margins: 8
-                clip: true
-                contentWidth: preview.width
-                contentHeight: preview.height
-                boundsBehavior: Flickable.StopAtBounds
-                interactive: true
                 visible: kicadController && kicadController.schematicUrl.length > 0
+                clip: true
 
-                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-                ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+                Flickable {
+                    id: flick
+                    anchors.fill: parent
+                    clip: true
+                    contentWidth: previewLayer.width
+                    contentHeight: previewLayer.height
+                    boundsBehavior: Flickable.StopAtBounds
+                    interactive: true
+                    // Wheel zoom is handled on the viewport so Windows mouse
+                    // wheels are not swallowed by Flickable's scroll handler.
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
 
-                Item {
-                    id: previewLayer
-                    width: preview.width
-                    height: preview.height
+                    Item {
+                        id: previewLayer
+                        width: root.baseW * root.zoom
+                        height: root.baseH * root.zoom
 
-                    Image {
-                        id: preview
-                        source: kicadController ? kicadController.schematicUrl : ""
-                        asynchronous: true
-                        cache: false
-                        smooth: true
-                        mipmap: true
-                        fillMode: Image.Stretch
-                        width: root.nativeReady ? root.nativeW * root.zoom : implicitWidth
-                        height: root.nativeReady ? root.nativeH * root.zoom : implicitHeight
-                        sourceSize.width: root.renderW
-                        sourceSize.height: root.renderH
+                        Image {
+                            id: preview
+                            source: kicadController ? kicadController.schematicUrl : ""
+                            asynchronous: true
+                            cache: false
+                            smooth: true
+                            mipmap: false
+                            fillMode: Image.Stretch
+                            width: root.baseW
+                            height: root.baseH
+                            transformOrigin: Item.TopLeft
+                            scale: root.zoom
+                            sourceSize: root.nativeReady && root.renderW > 0 && root.renderH > 0
+                                        ? Qt.size(root.renderW, root.renderH)
+                                        : Qt.size(-1, -1)
 
-                        onStatusChanged: {
-                            if (status === Image.Error && root.rasterCap > 2048) {
-                                root.rasterCap = 2048
-                                return
+                            onStatusChanged: {
+                                if (status === Image.Error && root.rasterCap > 2048) {
+                                    root.rasterCap = 2048
+                                    return
+                                }
+                                if (status === Image.Ready)
+                                    Qt.callLater(root.captureNativeSize)
                             }
-                            if (status === Image.Ready && !root.nativeReady && implicitWidth > 1 && implicitHeight > 1) {
-                                root.nativeW = implicitWidth
-                                root.nativeH = implicitHeight
-                                root.nativeReady = true
-                                Qt.callLater(root.applyDefaultZoom)
-                            }
+
+                            onImplicitWidthChanged: root.captureNativeSize()
+                            onImplicitHeightChanged: root.captureNativeSize()
+                            onPaintedWidthChanged: root.captureNativeSize()
+                            onPaintedHeightChanged: root.captureNativeSize()
+                            onSourceChanged: root.resetNative()
                         }
 
-                        onSourceChanged: root.resetNative()
+                        Repeater {
+                            model: kicadController ? kicadController.highlightBoxes : []
+
+                            Rectangle {
+                                required property var modelData
+                                readonly property bool fromDetail: projectController
+                                         && projectController.detailReference === modelData.reference
+                                readonly property bool fromIssue: agentController
+                                         && agentController.schematicHighlightRefs.indexOf(modelData.reference) >= 0
+                                visible: (fromDetail || fromIssue)
+                                         && kicadController
+                                         && kicadController.schematicPageWidth > 0
+                                readonly property real sx: previewLayer.width / kicadController.schematicPageWidth
+                                readonly property real sy: previewLayer.height / kicadController.schematicPageHeight
+                                x: (modelData.x - modelData.w / 2) * sx
+                                y: (modelData.y - modelData.h / 2) * sy
+                                width: modelData.w * sx
+                                height: modelData.h * sy
+                                color: fromDetail ? "#334a8fc4" : "#33e6b84d"
+                                border.color: fromDetail ? "#4a8fc4" : "#e6b84d"
+                                border.width: 2
+                                radius: 3
+                            }
+                        }
                     }
 
-                    Repeater {
-                        model: kicadController ? kicadController.highlightBoxes : []
-
-                        Rectangle {
-                            required property var modelData
-                            visible: projectController
-                                     && projectController.detailReference === modelData.reference
-                                     && kicadController
-                                     && kicadController.schematicPageWidth > 0
-                            readonly property real sx: preview.width / kicadController.schematicPageWidth
-                            readonly property real sy: preview.height / kicadController.schematicPageHeight
-                            x: (modelData.x - modelData.w / 2) * sx
-                            y: (modelData.y - modelData.h / 2) * sy
-                            width: modelData.w * sx
-                            height: modelData.h * sy
-                            color: "#334a8fc4"
-                            border.color: "#4a8fc4"
-                            border.width: 2
-                            radius: 3
+                    PinchHandler {
+                        target: null
+                        onActiveChanged: {
+                            if (active)
+                                root.pinchStartZoom = root.zoom
+                        }
+                        onScaleChanged: {
+                            if (active)
+                                root.setZoom(root.pinchStartZoom * scale, centroid.position.x, centroid.position.y)
                         }
                     }
                 }
 
                 WheelHandler {
-                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    // macOS/Linux: handle wheel here. Windows mouse wheels are
+                    // PointerDevice.Mouse and get eaten by Flickable instead.
+                    enabled: Qt.platform.os !== "windows"
+                    blocking: true
+                    grabPermissions: PointerHandler.CanTakeOverFromAnything
                     onWheel: function (event) {
-                        const factor = event.angleDelta.y > 0 ? 1.15 : 1 / 1.15
-                        root.setZoom(root.zoom * factor, event.position.x, event.position.y)
+                        const dy = event.angleDelta.y !== 0 ? event.angleDelta.y : event.pixelDelta.y
+                        root.zoomAt(dy, event.position.x, event.position.y)
                         event.accepted = true
                     }
                 }
 
-                PinchHandler {
-                    target: null
-                    onActiveChanged: {
-                        if (active)
-                            root.pinchStartZoom = root.zoom
-                    }
-                    onScaleChanged: {
-                        if (active)
-                            root.setZoom(root.pinchStartZoom * scale, centroid.position.x, centroid.position.y)
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.NoButton
+                    enabled: Qt.platform.os === "windows"
+                    onWheel: function (wheel) {
+                        const dy = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.pixelDelta.y
+                        root.zoomAt(dy, wheel.x, wheel.y)
+                        wheel.accepted = true
                     }
                 }
             }

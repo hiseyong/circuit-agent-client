@@ -84,6 +84,8 @@ Rectangle {
                 required property string reference
                 required property string source
                 required property var evidence
+                required property bool highlighted
+                required property var highlightTargets
 
                 width: issueList.width - issueList.leftMargin - issueList.rightMargin
                 implicitHeight: issueBody.implicitHeight + 20
@@ -197,6 +199,47 @@ Rectangle {
                         width: parent.width
                     }
 
+                    Row {
+                        spacing: 8
+                        width: parent.width
+
+                        Switch {
+                            id: highlightSwitch
+                            checked: highlighted
+                            enabled: highlightTargets.length > 0
+                            onClicked: agentController.toggleIssueHighlightAt(index)
+                            indicator: Rectangle {
+                                implicitWidth: 32
+                                implicitHeight: 18
+                                x: highlightSwitch.leftPadding
+                                y: parent.height / 2 - height / 2
+                                radius: 9
+                                color: highlightSwitch.checked ? "#2d6b4f" : "#2a303b"
+                                border.color: highlightSwitch.checked ? "#3ecf8e" : "#333845"
+
+                                Rectangle {
+                                    x: highlightSwitch.checked ? parent.width - width - 2 : 2
+                                    y: 2
+                                    width: 14
+                                    height: 14
+                                    radius: 7
+                                    color: highlightSwitch.enabled ? "#e8eaed" : "#6d737c"
+                                }
+                            }
+                            implicitWidth: 36
+                            implicitHeight: 22
+                        }
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: highlightTargets.length > 0
+                                  ? "Highlight in schematic  ·  " + highlightTargets.join(", ")
+                                  : "Highlight in schematic"
+                            color: highlightSwitch.enabled ? "#c5cad3" : "#6d737c"
+                            font.pixelSize: 12
+                        }
+                    }
+
                     Text {
                         visible: source.length > 0
                         text: "Issue source: " + source
@@ -214,7 +257,7 @@ Rectangle {
                             width: issueBody.width
                             implicitHeight: evCol.implicitHeight + 16
                             color: "#16181d"
-                            border.color: "#333845"
+                            border.color: modelData.canOpen ? "#3d5a80" : "#333845"
                             radius: 4
 
                             Column {
@@ -225,12 +268,26 @@ Rectangle {
                                 anchors.margins: 8
                                 spacing: 8
 
-                                Text {
-                                    text: "EVIDENCE"
-                                    color: "#5b9fd4"
-                                    font.pixelSize: 10
-                                    font.letterSpacing: 0.6
-                                    font.weight: Font.DemiBold
+                                Row {
+                                    width: parent.width
+                                    spacing: 8
+
+                                    Text {
+                                        text: "EVIDENCE"
+                                        color: "#5b9fd4"
+                                        font.pixelSize: 10
+                                        font.letterSpacing: 0.6
+                                        font.weight: Font.DemiBold
+                                    }
+
+                                    Text {
+                                        visible: modelData.canOpen
+                                        text: modelData.pageNumber > 0
+                                              ? "Tap to open PDF  ·  p." + modelData.pageNumber
+                                              : "Tap to open PDF"
+                                        color: "#5b9fd4"
+                                        font.pixelSize: 10
+                                    }
                                 }
 
                                 Column {
@@ -315,6 +372,15 @@ Rectangle {
                                         font.pixelSize: 12
                                     }
 
+                                    Text {
+                                        visible: modelData.url.length > 0
+                                        text: "PDF: " + modelData.url
+                                        color: "#5b9fd4"
+                                        font.pixelSize: 12
+                                        wrapMode: Text.Wrap
+                                        width: parent.width
+                                    }
+
                                     Repeater {
                                         model: modelData.extras
                                         Text {
@@ -367,6 +433,20 @@ Rectangle {
                                         }
                                     }
                                 }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                z: 1
+                                enabled: modelData.canOpen && evidencePreview
+                                hoverEnabled: enabled
+                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: evidencePreview.openUrl(
+                                    modelData.url,
+                                    modelData.pageNumber,
+                                    modelData.document,
+                                    modelData.content
+                                )
                             }
                         }
                     }

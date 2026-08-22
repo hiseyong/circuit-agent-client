@@ -16,6 +16,7 @@ from circuit_agent.controllers.agent_controller import AgentController
 from circuit_agent.controllers.analysis_controller import AnalysisController
 from circuit_agent.controllers.kicad_controller import KiCadController
 from circuit_agent.controllers.project_controller import ProjectController
+from circuit_agent.controllers.evidence_preview_controller import EvidencePreviewController
 from circuit_agent.controllers.spice_controller import SpiceController
 from circuit_agent.kicad.client import KiCadClient
 from circuit_agent.kicad.local_client import LocalKiCadClient
@@ -149,6 +150,7 @@ class Application:
             mode=self.config.kicad_mode,
         )
         self.spice_controller = SpiceController(self.kicad, self.async_runner)
+        self.evidence_preview = EvidencePreviewController(self.async_runner)
         self.project_controller.bind_kicad(self.kicad_controller)
         self.kicad_controller.bind_analysis(self.analysis_controller)
         self.analysis_controller.bind_ui(
@@ -156,7 +158,9 @@ class Application:
             self.agent_controller,
             self.kicad_controller,
         )
-        self.agent_controller.bind_context(self.analysis_controller, self.kicad)
+        self.agent_controller.bind_context(
+            self.analysis_controller, self.kicad, self.project_controller
+        )
 
         logger.info("Application started")
         if self.config.backend_mode == "remote":

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 _KNOWN_FIELDS = {
     "source",
@@ -16,6 +16,8 @@ _KNOWN_FIELDS = {
     "confidence",
     "metadata",
     "raw",
+    "url",
+    "datasheet_url",
 }
 
 
@@ -25,11 +27,18 @@ class Evidence(BaseModel):
     source: str
     document: str
     page: int | None = None
+    url: str = ""
     section: str = ""
     content: str
     confidence: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     raw: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _fill_url(self) -> Evidence:
+        if not self.url:
+            object.__setattr__(self, "url", evidence_url(self.metadata, self.raw))
+        return self
 
 
 def evidence_from_payload(item: dict[str, Any]) -> Evidence:
@@ -41,12 +50,26 @@ def evidence_from_payload(item: dict[str, Any]) -> Evidence:
         source=str(item.get("source") or ""),
         document=str(item.get("document") or ""),
         page=_optional_int(item.get("page")),
+        url=evidence_url(item, nested),
         section=str(item.get("section") or ""),
         content=str(item.get("content") or ""),
         confidence=_optional_float(item.get("confidence")),
         metadata={**nested, **extra},
         raw=dict(item),
     )
+
+
+def evidence_url(*sources: dict[str, Any] | None) -> str:
+    """Accept datasheet_url or url from the payload or nested metadata."""
+
+    for source in sources:
+        if not source:
+            continue
+        for key in ("datasheet_url", "url"):
+            raw = str(source.get(key) or "").strip()
+            if raw.startswith("https://") or raw.startswith("http://"):
+                return raw
+    return ""
 
 
 def _optional_int(value: Any) -> int | None:
@@ -92,14 +115,18 @@ def evidence_card(entry: Evidence) -> dict[str, Any]:
         location_parts.append(f"p.{entry.page}")
     if entry.section:
         location_parts.append(entry.section)
+    url = evidence_url({"url": entry.url}, entry.metadata, entry.raw)
     return {
         "document": entry.document,
         "page": "" if entry.page is None else str(entry.page),
+        "pageNumber": entry.page or 0,
         "section": entry.section,
         "content": entry.content,
         "source": entry.source,
         "confidence": "" if entry.confidence is None else f"{entry.confidence:.0%}",
         "location": "  ·  ".join(location_parts),
+        "url": url,
+        "canOpen": bool(url),
         "extras": extras,
         "json": evidence_json(entry),
     }

@@ -126,6 +126,7 @@ class AgentController(QObject):
     agentStatusChanged = Signal()
     busyChanged = Signal()
     issuesChanged = Signal()
+    schematicHighlightChanged = Signal()
     pendingChanged = Signal()
 
     def __init__(
@@ -146,13 +147,18 @@ class AgentController(QObject):
         )
         self._analysis = None
         self._kicad = None
+        self._project = None
         self._pending_revision_id = ""
         self._solving_issue: CircuitIssue | None = None
+        self._issues.set_known_refs(self._known_refs)
 
-    def bind_context(self, analysis_controller, kicad_client) -> None:
+    def bind_context(self, analysis_controller, kicad_client, project_controller=None) -> None:
         self._analysis = analysis_controller
         self._kicad = kicad_client
+        self._project = project_controller
         self._analysis.historyChanged.connect(self._sync_pending)
+        if project_controller is not None:
+            project_controller.projectChanged.connect(self._on_project_changed)
 
     @Property(str, notify=agentStatusChanged)
     def agentStatus(self) -> str:
@@ -174,6 +180,26 @@ class AgentController(QObject):
     def issueCount(self) -> int:
         return self._issues.rowCount()
 
+    @Property("QStringList", notify=schematicHighlightChanged)
+    def schematicHighlightRefs(self) -> list[str]:
+        return self._issues.highlighted_references()
+
+    def _known_refs(self) -> set[str]:
+        if self._project is None:
+            return set()
+        return self._project.componentModel.references()
+
+    def _on_project_changed(self) -> None:
+        self._issues.refresh_targets()
+        self.schematicHighlightChanged.emit()
+
+    @Slot(int)
+    def toggleIssueHighlightAt(self, row: int) -> None:
+        if self._issues.at(row) is None:
+            return
+        self._issues.toggle_highlight(row)
+        self.schematicHighlightChanged.emit()
+
     @Slot(int)
     def solveIssueAt(self, row: int) -> None:
         issue = self._issues.at(row)
@@ -188,6 +214,7 @@ class AgentController(QObject):
             return
         self._solving_issue = removed
         self.issuesChanged.emit()
+        self.schematicHighlightChanged.emit()
         self.sendMessage(solve_issue_prompt(removed))
 
     @Slot(int)
@@ -197,6 +224,7 @@ class AgentController(QObject):
             logger.warning("Dismiss ignored: issue %s not found", row)
             return
         self.issuesChanged.emit()
+        self.schematicHighlightChanged.emit()
         self._persist()
         logger.info("Issue dismissed: %s", removed.title)
 
@@ -217,6 +245,7 @@ class AgentController(QObject):
     def apply_issues(self, issues: list[CircuitIssue]) -> None:
         self._issues.reset_from(issues)
         self.issuesChanged.emit()
+        self.schematicHighlightChanged.emit()
         self._persist()
 
     @Property(bool, notify=pendingChanged)
@@ -250,6 +279,7 @@ class AgentController(QObject):
             self.agentStatusChanged.emit()
             self.busyChanged.emit()
         self.issuesChanged.emit()
+        self.schematicHighlightChanged.emit()
         self.pendingChanged.emit()
 
     def reset_session(self) -> None:

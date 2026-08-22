@@ -8,6 +8,7 @@ dependencies = [
     "pyside6-essentials>=6.7",
     "pydantic>=2.0",
     "httpx>=0.28.1",
+    "pypdfium2>=5.13.0",
 ]
 
 [project.scripts]
