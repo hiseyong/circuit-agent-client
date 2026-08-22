@@ -8,7 +8,7 @@ from PySide6.QtCore import QAbstractListModel, QModelIndex, Qt
 
 from circuit_agent.models.agent import ChatMessage
 from circuit_agent.models.analysis import CircuitRevision
-from circuit_agent.models.evidence import Evidence
+from circuit_agent.models.evidence import Evidence, evidence_card
 from circuit_agent.models.issue import CircuitIssue
 from circuit_agent.models.project import Component
 
@@ -217,17 +217,7 @@ class IssueListModel(QAbstractListModel):
         if role == self.SourceRole:
             return item.source
         if role == self.EvidenceRole:
-            return [
-                {
-                    "document": entry.document,
-                    "page": "" if entry.page is None else str(entry.page),
-                    "section": entry.section,
-                    "content": entry.content,
-                    "source": entry.source,
-                    "confidence": "" if entry.confidence is None else f"{entry.confidence:.0%}",
-                }
-                for entry in item.evidence
-            ]
+            return [evidence_card(entry) for entry in item.evidence]
         return None
 
     def roleNames(self) -> dict[int, bytes]:  # noqa: N802

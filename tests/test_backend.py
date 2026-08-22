@@ -137,6 +137,7 @@ def test_analysis_from_response_maps_issues() -> None:
     assert analysis.purpose == "Buck converter"
     assert analysis.issues[0].reference == "C1"
     assert analysis.issues[0].evidence[0].page == 8
+    assert analysis.issues[0].evidence[0].raw["document"] == "TPS62160"
     assert analysis.revisions[0].title == "Circuit analysis"
 
 

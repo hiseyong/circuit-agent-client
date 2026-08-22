@@ -199,9 +199,11 @@ Rectangle {
 
                     Text {
                         visible: source.length > 0
-                        text: source
-                        color: "#6d737c"
+                        text: "Issue source: " + source
+                        color: "#9aa0a6"
                         font.pixelSize: 11
+                        wrapMode: Text.Wrap
+                        width: parent.width
                     }
 
                     Repeater {
@@ -221,7 +223,7 @@ Rectangle {
                                 anchors.right: parent.right
                                 anchors.top: parent.top
                                 anchors.margins: 8
-                                spacing: 3
+                                spacing: 8
 
                                 Text {
                                     text: "EVIDENCE"
@@ -231,32 +233,139 @@ Rectangle {
                                     font.weight: Font.DemiBold
                                 }
 
-                                Text {
-                                    text: modelData.document
-                                          + (modelData.page.length > 0 ? "  ·  p." + modelData.page : "")
-                                          + (modelData.section.length > 0 ? "  ·  " + modelData.section : "")
-                                    color: "#e8eaed"
-                                    font.pixelSize: 12
-                                    font.weight: Font.DemiBold
-                                    wrapMode: Text.Wrap
+                                Column {
                                     width: parent.width
+                                    spacing: 4
+
+                                    Text {
+                                        text: "Excerpt"
+                                        color: "#e8eaed"
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                    }
+
+                                    Text {
+                                        text: "Quoted passage used to support this issue."
+                                        color: "#6d737c"
+                                        font.pixelSize: 11
+                                        wrapMode: Text.Wrap
+                                        width: parent.width
+                                    }
+
+                                    SelectableText {
+                                        width: parent.width
+                                        text: modelData.content.length > 0
+                                              ? modelData.content
+                                              : "(empty excerpt)"
+                                        color: "#c5cad3"
+                                        font.pixelSize: 12
+                                    }
                                 }
 
-                                Text {
-                                    text: modelData.content
-                                    color: "#c5cad3"
-                                    font.pixelSize: 12
-                                    wrapMode: Text.Wrap
+                                Column {
                                     width: parent.width
+                                    spacing: 4
+
+                                    Text {
+                                        text: "Source"
+                                        color: "#e8eaed"
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                    }
+
+                                    Text {
+                                        text: "Where this excerpt came from."
+                                        color: "#6d737c"
+                                        font.pixelSize: 11
+                                        wrapMode: Text.Wrap
+                                        width: parent.width
+                                    }
+
+                                    Text {
+                                        visible: modelData.source.length > 0
+                                        text: "Kind: " + modelData.source
+                                        color: "#c5cad3"
+                                        font.pixelSize: 12
+                                        wrapMode: Text.Wrap
+                                        width: parent.width
+                                    }
+
+                                    Text {
+                                        visible: modelData.document.length > 0
+                                        text: "Document: " + modelData.document
+                                        color: "#c5cad3"
+                                        font.pixelSize: 12
+                                        wrapMode: Text.Wrap
+                                        width: parent.width
+                                    }
+
+                                    Text {
+                                        visible: modelData.location.length > 0
+                                        text: "Location: " + modelData.location
+                                        color: "#c5cad3"
+                                        font.pixelSize: 12
+                                        wrapMode: Text.Wrap
+                                        width: parent.width
+                                    }
+
+                                    Text {
+                                        visible: modelData.confidence.length > 0
+                                        text: "Confidence: " + modelData.confidence
+                                        color: "#c5cad3"
+                                        font.pixelSize: 12
+                                    }
+
+                                    Repeater {
+                                        model: modelData.extras
+                                        Text {
+                                            required property string modelData
+                                            width: evCol.width
+                                            text: modelData
+                                            color: "#9aa0a6"
+                                            font.pixelSize: 12
+                                            wrapMode: Text.Wrap
+                                        }
+                                    }
                                 }
 
-                                Text {
-                                    text: modelData.source
-                                          + (modelData.confidence.length > 0 ? "  ·  " + modelData.confidence : "")
-                                    color: "#6d737c"
-                                    font.pixelSize: 11
-                                    wrapMode: Text.Wrap
+                                Column {
                                     width: parent.width
+                                    spacing: 4
+
+                                    Text {
+                                        text: "Original JSON"
+                                        color: "#e8eaed"
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                    }
+
+                                    Text {
+                                        text: "Payload as received from the analysis API."
+                                        color: "#6d737c"
+                                        font.pixelSize: 11
+                                        wrapMode: Text.Wrap
+                                        width: parent.width
+                                    }
+
+                                    Rectangle {
+                                        width: parent.width
+                                        implicitHeight: jsonText.height + 12
+                                        color: "#12141a"
+                                        border.color: "#333845"
+                                        radius: 4
+
+                                        SelectableText {
+                                            id: jsonText
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.margins: 6
+                                            text: modelData.json
+                                            color: "#c5cad3"
+                                            font.pixelSize: 11
+                                            font.family: "monospace"
+                                        }
+                                    }
                                 }
                             }
                         }

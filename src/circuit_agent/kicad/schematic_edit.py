@@ -11,6 +11,7 @@ from typing import Any
 
 from circuit_agent.kicad.client import KiCadError
 from circuit_agent.kicad.commands import normalize_command
+from circuit_agent.kicad.symbol_library import load_symbol
 
 _PROP_RE = re.compile(r'\(property\s+"([^"]+)"\s+"([^"]*)"')
 _AT_RE = re.compile(r"\(at\s+(-?[\d.]+)\s+(-?[\d.]+)(?:\s+(-?[\d.]+))?")
@@ -18,7 +19,14 @@ _PIN_NUMBER_RE = re.compile(r'\(number\s+"([^"]*)"')
 _PIN_NAME_RE = re.compile(r'\(name\s+"([^"]*)"')
 _REF_INSTANCE_RE = re.compile(r'\(reference\s+"([^"]*)"')
 _LIB_ID_RE = re.compile(r'\(lib_id\s+"([^"]+)"')
-_XY_RE = re.compile(r"\(xy\s+(-?[\d.]+)\s+(-?[\d.]+)\)")
+_INSTANCE_AT_RE = re.compile(
+    r'\(lib_id\s+"[^"]+"\)\s*\(at\s+(-?[\d.]+)\s+(-?[\d.]+)(?:\s+(-?[\d.]+))?'
+)
+
+_PROJECT_INST_RE = re.compile(r'\(project\s+"([^"]*)"')
+_PATH_INST_RE = re.compile(r'\(path\s+"([^"]*)"')
+_ROOT_UUID_RE = re.compile(r'\(uuid\s+"([^"]+)"')
+_SYMBOL_NAME_RE = re.compile(r'\(symbol\s+"([^"]+)"')
 
 _COMMON_LIBS = {
     "R": "Device:R",
@@ -26,6 +34,8 @@ _COMMON_LIBS = {
     "L": "Device:L",
     "D": "Device:LED",
     "LED": "Device:LED",
+    "BT": "Device:Battery",
+    "BAT": "Device:Battery",
 }
 
 _BUILTIN_SYMBOLS = {
@@ -78,9 +88,28 @@ _BUILTIN_SYMBOLS = {
 			(pin_names (offset 0) (hide yes))
 			(property "Reference" "D" (at 0 2.54 0) (effects (font (size 1.27 1.27))))
 			(property "Value" "LED" (at 0 -2.54 0) (effects (font (size 1.27 1.27))))
-			(symbol "LED_1_1"
+            (symbol "LED_1_1"
 				(pin passive line (at -3.81 0 180) (length 2.54) (name "K") (number "1"))
 				(pin passive line (at 3.81 0 0) (length 2.54) (name "A") (number "2"))
+			)
+		)""",
+    "Device:Battery": """
+		(symbol "Device:Battery"
+			(pin_numbers (hide yes))
+			(pin_names (offset 0) (hide yes))
+			(property "Reference" "BT" (at 2.54 2.54 0) (effects (font (size 1.27 1.27)) (justify left)))
+			(property "Value" "Battery" (at 2.54 0 0) (effects (font (size 1.27 1.27)) (justify left)))
+			(symbol "Battery_0_1"
+				(rectangle (start -2.286 1.905) (end 2.286 1.905)
+					(stroke (width 0.254) (type default)) (fill (type none)))
+				(rectangle (start -1.524 -1.905) (end 1.524 -1.905)
+					(stroke (width 0.254) (type default)) (fill (type none)))
+				(polyline (pts (xy 0 1.905) (xy 0 3.81)) (stroke (width 0) (type default)) (fill (type none)))
+				(polyline (pts (xy 0 -1.905) (xy 0 -3.81)) (stroke (width 0) (type default)) (fill (type none)))
+			)
+			(symbol "Battery_1_1"
+				(pin passive line (at 0 5.08 270) (length 2.54) (name "+") (number "1"))
+				(pin passive line (at 0 -5.08 90) (length 2.54) (name "-") (number "2"))
 			)
 		)""",
 }
@@ -105,7 +134,7 @@ def apply_schematic_commands(path: Path, commands: list[dict[str, Any]]) -> Sche
         return SchematicEditResult()
 
     original = path.read_text(encoding="utf-8", errors="replace")
-    editor = SchematicEditor(original)
+    editor = SchematicEditor(original, schematic_path=path)
     result = SchematicEditResult()
     for command in commands:
         label = _command_label(command)
@@ -134,8 +163,9 @@ def _command_label(command: dict[str, Any]) -> str:
 
 
 class SchematicEditor:
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str, schematic_path: Path | None = None) -> None:
         self.text = text
+        self.schematic_path = schematic_path
 
     def apply(self, command: dict[str, Any]) -> None:
         command = normalize_command(command)
@@ -166,7 +196,7 @@ class SchematicEditor:
     def set_lib_id(self, reference: str, lib_id: str) -> None:
         if not lib_id:
             raise SchematicEditError("set_lib_id needs a lib_id")
-        self._ensure_lib_symbol(lib_id)
+        lib_id = self._ensure_lib_symbol(lib_id)
         start, end = self._instance_span(reference)
         block = self.text[start:end]
         if not _LIB_ID_RE.search(block):
@@ -212,9 +242,16 @@ class SchematicEditor:
                 self.set_property(reference, "Value", value)
             if footprint:
                 self.set_property(reference, "Footprint", footprint)
+            current = lib_id or self._current_lib_id(reference)
+            missing_graphics = bool(current) and self._canonical_embedded_lib_id(current) is None
+            if missing_graphics:
+                canonical = self._ensure_lib_symbol(current)
+                if canonical != self._current_lib_id(reference):
+                    self.set_lib_id(reference, canonical)
+            if lib_id or missing_graphics:
+                self._ensure_instances(reference)
             return
-        lib_id = lib_id or _infer_lib_id(reference)
-        self._ensure_lib_symbol(lib_id)
+        lib_id = self._ensure_lib_symbol(lib_id or _infer_lib_id(reference))
         x, y = self._next_placement()
         block = _instance_block(
             lib_id,
@@ -223,6 +260,9 @@ class SchematicEditor:
             footprint,
             x,
             y,
+            pin_numbers=self._pin_numbers(lib_id),
+            project=self._annotation_project(),
+            sheet_path=self._annotation_path(),
         )
         self._insert_before_trailer(block)
 
@@ -271,6 +311,40 @@ class SchematicEditor:
             "\t)\n"
         )
 
+    def _current_lib_id(self, reference: str) -> str:
+        start, end = self._instance_span(reference)
+        match = _LIB_ID_RE.search(self.text[start:end])
+        return match.group(1) if match else ""
+
+    def _ensure_instances(self, reference: str) -> None:
+        start, end = self._instance_span(reference)
+        block = self.text[start:end]
+        if "(instances" in block:
+            updated = re.sub(
+                r'\(reference\s+"[^"]*"',
+                f'(reference "{_escape(reference)}"',
+                block,
+                count=1,
+            )
+            if updated != block:
+                self.text = self.text[:start] + updated + self.text[end:]
+            return
+        insertion = (
+            "\t\t(instances\n"
+            f'\t\t\t(project "{_escape(self._annotation_project())}"\n'
+            f'\t\t\t\t(path "{_escape(self._annotation_path())}"\n'
+            f'\t\t\t\t\t(reference "{_escape(reference)}")\n'
+            "\t\t\t\t\t(unit 1)\n"
+            "\t\t\t\t)\n"
+            "\t\t\t)\n"
+            "\t\t)\n"
+        )
+        closing = block.rfind(")")
+        if closing < 0:
+            return
+        updated = block[:closing] + insertion + block[closing:]
+        self.text = self.text[:start] + updated + self.text[end:]
+
     def _instance_span(self, reference: str) -> tuple[int, int]:
         span = self._find_instance(reference)
         if span is None:
@@ -293,7 +367,7 @@ class SchematicEditor:
             raise SchematicEditError("pin spec is empty")
         start, end = self._instance_span(reference)
         block = self.text[start:end]
-        at = _AT_RE.search(block)
+        at = _INSTANCE_AT_RE.search(block) or _AT_RE.search(block)
         if at is None:
             raise SchematicEditError(f"{reference} has no position")
         origin = (float(at.group(1)), float(at.group(2)))
@@ -324,33 +398,104 @@ class SchematicEditor:
         return 0.0, 0.0
 
     def _lib_symbol_text(self, lib_id: str) -> str | None:
+        canonical = self._canonical_embedded_lib_id(lib_id)
+        if canonical is None:
+            return None
         span = self._lib_symbols_span()
-        if span is None or not lib_id:
+        if span is None:
             return None
         block = self.text[span[0] : span[1]]
-        needle = f'(symbol "{lib_id}"'
+        needle = f'(symbol "{canonical}"'
         idx = block.find(needle)
         if idx < 0:
-            return None
+            idx = block.lower().find(needle.lower())
+            if idx < 0:
+                return None
         close = _matching_paren(block, idx)
         return block[idx : close + 1]
 
-    def _ensure_lib_symbol(self, lib_id: str) -> None:
-        if self._lib_symbol_text(lib_id) is not None:
-            return
-        builtin = _BUILTIN_SYMBOLS.get(lib_id)
-        if builtin is None:
-            return
+    def _canonical_embedded_lib_id(self, lib_id: str) -> str | None:
+        span = self._lib_symbols_span()
+        if span is None or not lib_id:
+            return None
+        wanted = lib_id.lower()
+        block = self.text[span[0] : span[1]]
+        for match in _SYMBOL_NAME_RE.finditer(block):
+            name = match.group(1)
+            if ":" not in name:
+                continue
+            if name.lower() == wanted:
+                return name
+        return None
+
+    def _ensure_lib_symbol(self, lib_id: str) -> str:
+        """Embed graphics for ``lib_id`` and return the canonical library id."""
+
+        lib_id = (lib_id or "").strip()
+        if not lib_id:
+            raise SchematicEditError("add_component needs a lib_id")
+        existing = self._canonical_embedded_lib_id(lib_id)
+        if existing is not None:
+            return existing
+        loaded = load_symbol(lib_id, self.schematic_path)
+        if loaded is not None:
+            self._insert_lib_symbol(loaded.body)
+            return loaded.lib_id
+        for key, builtin in _BUILTIN_SYMBOLS.items():
+            if key.lower() == lib_id.lower():
+                self._insert_lib_symbol(builtin)
+                return key
+        raise SchematicEditError(
+            f"unknown symbol {lib_id}; embed a KiCad library symbol before placing it"
+        )
+
+    def _insert_lib_symbol(self, body: str) -> None:
         span = self._lib_symbols_span()
         if span is None:
             self.text = self.text.replace(
                 "(kicad_sch",
-                f"(kicad_sch\n\t(lib_symbols\n{builtin}\n\t)",
+                f"(kicad_sch\n\t(lib_symbols\n{body}\n\t)",
                 1,
             )
             return
         insert_at = span[1] - 1
-        self.text = self.text[:insert_at] + builtin + "\n" + self.text[insert_at:]
+        self.text = self.text[:insert_at] + body + "\n" + self.text[insert_at:]
+
+    def _pin_numbers(self, lib_id: str) -> list[str]:
+        lib = self._lib_symbol_text(lib_id)
+        if not lib:
+            return ["1", "2"]
+        numbers: list[str] = []
+        seen: set[str] = set()
+        for match in _PIN_NUMBER_RE.finditer(lib):
+            number = match.group(1)
+            if not number or number in seen:
+                continue
+            seen.add(number)
+            numbers.append(number)
+        return numbers or ["1", "2"]
+
+    def _annotation_project(self) -> str:
+        match = _PROJECT_INST_RE.search(self.text)
+        if match:
+            return match.group(1)
+        if self.schematic_path is not None:
+            return self.schematic_path.stem
+        return ""
+
+    def _annotation_path(self) -> str:
+        for start, end in self._top_level_spans("symbol"):
+            match = _PATH_INST_RE.search(self.text[start:end])
+            if match:
+                return match.group(1)
+        root = self._root_uuid()
+        return f"/{root}" if root else "/"
+
+    def _root_uuid(self) -> str:
+        span = self._lib_symbols_span()
+        head = self.text[: span[0]] if span is not None else self.text[:4000]
+        match = _ROOT_UUID_RE.search(head)
+        return match.group(1) if match else ""
 
     def _lib_symbols_span(self) -> tuple[int, int] | None:
         idx = self.text.find("(lib_symbols")
@@ -418,7 +563,14 @@ def _instance_block(
     footprint: str,
     x: float,
     y: float,
+    pin_numbers: list[str] | None = None,
+    project: str = "",
+    sheet_path: str = "/",
 ) -> str:
+    pins = pin_numbers or ["1", "2"]
+    pin_lines = "".join(
+        f'\t\t(pin "{_escape(number)}" (uuid "{uuid.uuid4()}"))\n' for number in pins
+    )
     return (
         f'\n\t(symbol\n'
         f'\t\t(lib_id "{_escape(lib_id)}")\n'
@@ -445,8 +597,15 @@ def _instance_block(
         f"\t\t\t(at {x:.2f} {y:.2f} 0)\n"
         "\t\t\t(effects (font (size 1.27 1.27)) hide)\n"
         "\t\t)\n"
-        f'\t\t(pin "1" (uuid "{uuid.uuid4()}"))\n'
-        f'\t\t(pin "2" (uuid "{uuid.uuid4()}"))\n'
+        + pin_lines
+        + "\t\t(instances\n"
+        f'\t\t\t(project "{_escape(project)}"\n'
+        f'\t\t\t\t(path "{_escape(sheet_path)}"\n'
+        f'\t\t\t\t\t(reference "{_escape(reference)}")\n'
+        "\t\t\t\t\t(unit 1)\n"
+        "\t\t\t\t)\n"
+        "\t\t\t)\n"
+        "\t\t)\n"
         "\t)\n"
     )
 
@@ -513,6 +672,8 @@ def _transform_point(
     rotation: float,
     mirror: str,
 ) -> tuple[float, float]:
+    """Map library pin coords (Y-up) onto schematic sheet coords (Y-down)."""
+
     x, y = local
     rot = int(rotation) % 360
     if rot == 90:
@@ -521,6 +682,7 @@ def _transform_point(
         x, y = -x, -y
     elif rot == 270:
         x, y = y, -x
+    y = -y
     if mirror == "y":
         x = -x
     elif mirror == "x":

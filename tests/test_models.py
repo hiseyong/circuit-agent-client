@@ -9,7 +9,7 @@ from circuit_agent.models.analysis import (
     RevisionStatus,
     connections_from_raw,
 )
-from circuit_agent.models.evidence import Evidence
+from circuit_agent.models.evidence import Evidence, evidence_card, evidence_from_payload
 from circuit_agent.models.issue import CircuitIssue, IssueSeverity
 from circuit_agent.models.project import Component, Project
 
@@ -60,6 +60,27 @@ def test_evidence_creation() -> None:
     assert "3.0 V" in evidence.content
     assert evidence.confidence == 0.92
     assert evidence.metadata["citation"] == "p.8"
+
+
+def test_evidence_card_includes_source_and_original_json() -> None:
+    evidence = evidence_from_payload(
+        {
+            "source": "Manufacturer Datasheet",
+            "document": "TPS62160 Datasheet",
+            "page": 8,
+            "section": "Input Voltage",
+            "content": "3.0 V – 17 V",
+            "confidence": 0.92,
+            "url": "https://example.com/tps62160.pdf",
+        }
+    )
+    card = evidence_card(evidence)
+    assert card["source"] == "Manufacturer Datasheet"
+    assert card["location"] == "p.8  ·  Input Voltage"
+    assert card["confidence"] == "92%"
+    assert "url: https://example.com/tps62160.pdf" in card["extras"]
+    assert '"page": 8' in card["json"]
+    assert "tps62160.pdf" in card["json"]
 
 
 def test_chat_message_and_reply_defaults() -> None:

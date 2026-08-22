@@ -92,6 +92,64 @@ def resolve_kicad_cli(path: Path) -> Path | None:
     return None
 
 
+def find_symbol_dir(kicad_path: Path | None = None) -> Path | None:
+    """Return the directory that contains KiCad's ``*.kicad_sym`` libraries."""
+
+    for key in (
+        "KICAD10_SYMBOL_DIR",
+        "KICAD9_SYMBOL_DIR",
+        "KICAD8_SYMBOL_DIR",
+        "KICAD7_SYMBOL_DIR",
+        "KICAD_SYMBOL_DIR",
+    ):
+        raw = os.environ.get(key, "").strip()
+        if raw:
+            candidate = Path(raw).expanduser()
+            if candidate.is_dir():
+                return candidate
+
+    app = kicad_path or find_kicad()
+    candidates: list[Path] = []
+    if app is not None:
+        if _is_macos_app(app):
+            candidates.append(app / "Contents" / "SharedSupport" / "symbols")
+        elif app.is_file():
+            root = app.parent.parent
+            candidates.append(root / "share" / "kicad" / "symbols")
+            candidates.append(root / "share" / "symbols")
+        elif app.is_dir():
+            candidates.append(app / "Contents" / "SharedSupport" / "symbols")
+            candidates.append(app / "share" / "kicad" / "symbols")
+    candidates.extend(
+        [
+            Path("/usr/share/kicad/symbols"),
+            Path("/usr/local/share/kicad/symbols"),
+            Path("/opt/homebrew/share/kicad/symbols"),
+        ]
+    )
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def find_global_sym_lib_table(kicad_path: Path | None = None) -> Path | None:
+    """Return KiCad's global ``sym-lib-table``, if it is installed."""
+
+    app = kicad_path or find_kicad()
+    candidates: list[Path] = []
+    if app is not None and _is_macos_app(app):
+        candidates.append(app / "Contents" / "SharedSupport" / "template" / "sym-lib-table")
+    symbol_dir = find_symbol_dir(kicad_path)
+    if symbol_dir is not None:
+        candidates.append(symbol_dir.parent / "template" / "sym-lib-table")
+        candidates.append(symbol_dir.parent / "sym-lib-table")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def find_ngspice(kicad_path: Path | None = None) -> Path | None:
     """Return a standalone ngspice executable, if one is installed."""
 

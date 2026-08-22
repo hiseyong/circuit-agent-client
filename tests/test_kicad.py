@@ -340,6 +340,23 @@ def test_apply_add_remove_and_wire(tmp_path: Path) -> None:
     assert '(property "Reference" "R1"' not in text
 
 
+def test_add_wire_lands_on_library_pin_with_schematic_y_axis(tmp_path: Path) -> None:
+    schematic = tmp_path / "board.kicad_sch"
+    schematic.write_text(_SAMPLE_SCH, encoding="utf-8")
+    apply_schematic_commands(
+        schematic,
+        [{"op": "add_wire", "from_pin": "R1.1", "to_pin": "C1.1"}],
+    )
+    text = schematic.read_text(encoding="utf-8")
+    assert "(xy 100.00 76.19) (xy 130.00 76.19)" in text
+    apply_schematic_commands(
+        schematic,
+        [{"op": "add_wire", "from_pin": "R1.2", "to_pin": "C1.2"}],
+    )
+    text = schematic.read_text(encoding="utf-8")
+    assert "(xy 100.00 83.81) (xy 130.00 83.81)" in text
+
+
 def test_add_component_updates_existing_reference(tmp_path: Path) -> None:
     schematic = tmp_path / "board.kicad_sch"
     schematic.write_text(_SAMPLE_SCH, encoding="utf-8")
@@ -406,6 +423,111 @@ def test_add_component_same_value_is_idempotent(tmp_path: Path) -> None:
     )
     assert result.applied
     assert schematic.read_text(encoding="utf-8") == _SAMPLE_SCH
+
+
+def test_add_component_embeds_battery_from_lowercase_lib_id(tmp_path: Path) -> None:
+    schematic = tmp_path / "board.kicad_sch"
+    schematic.write_text(_SAMPLE_SCH, encoding="utf-8")
+    result = apply_schematic_commands(
+        schematic,
+        [{"op": "add_component", "reference": "BT1", "value": "1.5V", "lib_id": "device:battery"}],
+    )
+    assert result.applied
+    assert not result.skipped
+    text = schematic.read_text(encoding="utf-8")
+    assert '(lib_id "Device:Battery")' in text
+    assert '(symbol "Device:Battery"' in text
+    assert '(property "Reference" "BT1"' in text
+    assert '(property "Value" "1.5V"' in text
+    assert '(reference "BT1")' in text
+    assert '(number "1"' in text
+    assert '(number "2"' in text
+    assert '(lib_id "device:battery")' not in text
+
+
+def test_add_component_infers_battery_from_bt_reference(tmp_path: Path) -> None:
+    schematic = tmp_path / "board.kicad_sch"
+    schematic.write_text(_SAMPLE_SCH, encoding="utf-8")
+    apply_schematic_commands(
+        schematic,
+        [{"op": "add_component", "reference": "BT2", "value": "3V"}],
+    )
+    text = schematic.read_text(encoding="utf-8")
+    assert '(lib_id "Device:Battery")' in text
+    assert '(property "Reference" "BT2"' in text
+
+
+def test_add_component_loads_project_library_symbol(tmp_path: Path) -> None:
+    lib = tmp_path / "Custom.kicad_sym"
+    lib.write_text(
+        """(kicad_symbol_lib
+	(symbol "Thing"
+		(symbol "Thing_1_1"
+			(pin passive line (at 0 2.54 270) (length 1.27) (name "~") (number "1"))
+			(pin passive line (at 0 -2.54 90) (length 1.27) (name "~") (number "A"))
+		)
+	)
+)
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "sym-lib-table").write_text(
+        f'(sym_lib_table\n\t(lib (name "Custom") (type "KiCad") (uri "{lib}") (options "") (descr ""))\n)\n',
+        encoding="utf-8",
+    )
+    schematic = tmp_path / "board.kicad_sch"
+    schematic.write_text(_SAMPLE_SCH, encoding="utf-8")
+    result = apply_schematic_commands(
+        schematic,
+        [{"op": "add_component", "reference": "U7", "value": "X", "lib_id": "custom:thing"}],
+    )
+    assert result.applied
+    text = schematic.read_text(encoding="utf-8")
+    assert '(lib_id "Custom:Thing")' in text
+    assert '(symbol "Custom:Thing"' in text
+    assert '(pin "A"' in text
+    assert '(pin "1"' in text
+
+
+def test_add_component_unknown_symbol_is_skipped(tmp_path: Path) -> None:
+    schematic = tmp_path / "board.kicad_sch"
+    schematic.write_text(_SAMPLE_SCH, encoding="utf-8")
+    original = schematic.read_text(encoding="utf-8")
+    with pytest.raises(KiCadError, match="unknown symbol"):
+        apply_schematic_commands(
+            schematic,
+            [{"op": "add_component", "reference": "X1", "lib_id": "NoLib:NoSuchPart"}],
+        )
+    assert schematic.read_text(encoding="utf-8") == original
+
+
+def test_add_component_repairs_existing_missing_symbol(tmp_path: Path) -> None:
+    schematic = tmp_path / "board.kicad_sch"
+    schematic.write_text(
+        _SAMPLE_SCH.replace(
+            "\t(sheet_instances",
+            '\t(symbol\n'
+            '\t\t(lib_id "device:battery")\n'
+            "\t\t(at 160 80 0)\n"
+            '\t\t(property "Reference" "BT1")\n'
+            '\t\t(property "Value" "1.5V")\n'
+            "\t)\n"
+            "\t(sheet_instances",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    result = apply_schematic_commands(
+        schematic,
+        [{"op": "add_component", "reference": "BT1", "value": "1.5V", "lib_id": "device:battery"}],
+    )
+    assert result.applied
+    text = schematic.read_text(encoding="utf-8")
+    assert text.count('(property "Reference" "BT1"') == 1
+    assert '(lib_id "Device:Battery")' in text
+    assert '(symbol "Device:Battery"' in text
+    assert '(reference "BT1")' in text
+    assert '(lib_id "device:battery")' not in text
 
 
 @pytest.mark.asyncio

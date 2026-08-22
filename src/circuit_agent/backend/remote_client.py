@@ -19,7 +19,7 @@ from circuit_agent.models.analysis import (
     RevisionStatus,
     render_project_state,
 )
-from circuit_agent.models.evidence import Evidence
+from circuit_agent.models.evidence import Evidence, evidence_from_payload
 from circuit_agent.models.issue import (
     CircuitIssue,
     IssueChange,
@@ -146,6 +146,8 @@ def issue_payload(issue: CircuitIssue) -> dict[str, Any]:
             entry["page"] = item.page
         if item.confidence is not None:
             entry["confidence"] = item.confidence
+        if item.metadata:
+            entry["metadata"] = dict(item.metadata)
         evidence.append(entry)
     return {
         "severity": issue.severity.value,
@@ -165,14 +167,7 @@ def issues_from_response(raw_issues: Any) -> list[CircuitIssue]:
         if not isinstance(raw, dict):
             continue
         evidence = [
-            Evidence(
-                source=str(item.get("source") or ""),
-                document=str(item.get("document") or ""),
-                page=item.get("page"),
-                section=str(item.get("section") or ""),
-                content=str(item.get("content") or ""),
-                confidence=item.get("confidence"),
-            )
+            evidence_from_payload(item)
             for item in raw.get("evidence") or []
             if isinstance(item, dict)
         ]
