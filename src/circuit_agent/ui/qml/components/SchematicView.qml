@@ -3,10 +3,13 @@ import QtQuick.Controls
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import QtQuick.Window
+import ".."
 
 Rectangle {
     id: root
-    color: "#1e222a"
+    color: "#fbfcfe"
+
+    Theme { id: theme }
 
     property real zoom: 1.0
     property real nativeW: 1
@@ -107,20 +110,20 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 36
-            color: "#1e222a"
+            Layout.preferredHeight: 48
+            color: theme.surface
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 14
-                anchors.rightMargin: 10
+                anchors.leftMargin: 22
+                anchors.rightMargin: 20
                 spacing: 8
 
                 Text {
                     text: "SCHEMATIC"
-                    color: "#9aa0a6"
-                    font.pixelSize: 11
-                    font.letterSpacing: 0.8
+                    color: theme.muted
+                    font.pixelSize: 12
+                    font.family: theme.mono
                     font.weight: Font.DemiBold
                 }
 
@@ -128,9 +131,9 @@ Rectangle {
 
                 Text {
                     text: Math.round(root.zoom * 100) + "%"
-                    color: "#9aa0a6"
+                    color: theme.muted
                     font.pixelSize: 11
-                    font.family: "monospace"
+                    font.family: theme.mono
                 }
 
                 Repeater {
@@ -140,9 +143,12 @@ Rectangle {
                         { "label": "+", "action": "in" }
                     ]
 
-                    Button {
+                    OutlineButton {
                         required property var modelData
                         text: modelData.label
+                        implicitHeight: 28
+                        implicitWidth: modelData.action === "fit" ? 40 : 28
+                        labelColor: theme.text
                         onClicked: {
                             if (modelData.action === "in")
                                 root.setZoom(root.zoom * 1.25)
@@ -151,20 +157,6 @@ Rectangle {
                             else
                                 root.fitToView()
                         }
-                        background: Rectangle {
-                            color: parent.down ? "#2c3340" : (parent.hovered ? "#2a303b" : "#252a33")
-                            border.color: "#333845"
-                            radius: 4
-                        }
-                        contentItem: Text {
-                            text: parent.text
-                            color: "#e8eaed"
-                            font.pixelSize: 12
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        implicitHeight: 22
-                        implicitWidth: modelData.action === "fit" ? 36 : 24
                     }
                 }
             }
@@ -174,14 +166,14 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: 1
-                color: "#333845"
+                color: theme.border
             }
         }
 
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: "#efe7d6"
+            color: theme.subtle
 
             Item {
                 id: viewport
@@ -258,8 +250,8 @@ Rectangle {
                                 y: (modelData.y - modelData.h / 2) * sy
                                 width: modelData.w * sx
                                 height: modelData.h * sy
-                                color: fromDetail ? "#334a8fc4" : "#33e6b84d"
-                                border.color: fromDetail ? "#4a8fc4" : "#e6b84d"
+                                color: fromDetail ? "#33194df1" : "#33dc141e"
+                                border.color: fromDetail ? theme.brand : theme.danger
                                 border.width: 2
                                 radius: 3
                             }
@@ -308,7 +300,7 @@ Rectangle {
                 anchors.centerIn: parent
                 visible: !kicadController || kicadController.schematicUrl.length === 0
                 text: "Open a KiCad project to preview the schematic."
-                color: "#6d5c45"
+                color: theme.muted
                 font.pixelSize: 13
             }
         }

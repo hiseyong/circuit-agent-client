@@ -2,262 +2,379 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import ".."
 
 Rectangle {
     id: root
-    color: "#16181d"
+    color: "#ffffff"
+
+    Theme { id: theme }
+
+    property int selectedIndex: 0
+    signal issueActivated(int index, string title, string reference, string source, string description, string severity)
 
     function severityColor(level) {
         if (level === "error")
-            return "#e05d5d"
+            return theme.danger
         if (level === "warning")
-            return "#e6b84d"
-        return "#5b9fd4"
+            return theme.warning
+        return theme.brand
+    }
+
+    function severityFill(level) {
+        if (level === "error")
+            return theme.dangerSoft
+        if (level === "warning")
+            return theme.warningSoft
+        return "#eef2fb"
     }
 
     function severityLabel(level) {
         if (level === "error")
-            return "ERROR"
+            return "VIOLATION"
         if (level === "warning")
             return "WARNING"
         return "INFO"
     }
 
-    ColumnLayout {
+    function whyLabel(level) {
+        if (level === "error")
+            return "WHY THIS IS DANGEROUS"
+        if (level === "warning")
+            return "WHY THIS MATTERS"
+        return "DETAILS"
+    }
+
+    function issueCode(title) {
+        const compact = title.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "")
+        return compact.length > 0 ? compact.toUpperCase() : "ISSUE"
+    }
+
+    function evidenceLine(entries) {
+        if (!entries || entries.length === 0)
+            return ""
+        const first = entries[0]
+        const parts = []
+        if (first.document)
+            parts.push(first.document)
+        if (first.location)
+            parts.push(first.location)
+        return parts.join(" · ")
+    }
+
+    function activateIssue(index, title, reference, source, description, severity) {
+        root.issueActivated(index, title, reference, source, description, severity)
+    }
+
+    function firstOpenable(entries) {
+        if (!entries)
+            return null
+        for (let i = 0; i < entries.length; i++) {
+            if (entries[i].canOpen)
+                return entries[i]
+        }
+        return entries.length > 0 ? entries[0] : null
+    }
+
+    ListView {
+        id: issueList
         anchors.fill: parent
-        spacing: 0
+        clip: true
+        spacing: 10
+        topMargin: 12
+        bottomMargin: 12
+        model: agentController ? agentController.issueModel : null
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 36
-            color: "#1e222a"
+        delegate: Item {
+            id: issueDelegate
+            required property int index
+            required property string severity
+            required property string title
+            required property string description
+            required property string reference
+            required property string source
+            required property var evidence
+            required property bool highlighted
+            required property var highlightTargets
 
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 14
-                anchors.rightMargin: 14
+            readonly property bool expanded: issueList.count > 0
+                && index === Math.min(root.selectedIndex, issueList.count - 1)
+            readonly property var primaryEvidence: root.firstOpenable(evidence)
 
-                Text {
-                    text: "ISSUES"
-                    color: "#9aa0a6"
-                    font.pixelSize: 11
-                    font.letterSpacing: 0.8
-                    font.weight: Font.DemiBold
-                }
+            width: issueList.width
+            implicitHeight: card.height
+            height: implicitHeight
 
-                Item { Layout.fillWidth: true }
-
-                Text {
-                    visible: agentController && agentController.issueCount > 0
-                    text: agentController ? (agentController.issueCount + " found") : ""
-                    color: "#9aa0a6"
-                    font.pixelSize: 11
-                }
+            Component.onCompleted: {
+                if (index === 0 && root.selectedIndex === 0)
+                    root.activateIssue(index, title, reference, source, description, severity)
             }
 
             Rectangle {
+                id: card
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                height: 1
-                color: "#333845"
-            }
-        }
-
-        ListView {
-            id: issueList
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-            spacing: 10
-            leftMargin: 14
-            rightMargin: 14
-            topMargin: 12
-            bottomMargin: 12
-            model: agentController ? agentController.issueModel : null
-
-            delegate: Rectangle {
-                required property int index
-                required property string severity
-                required property string title
-                required property string description
-                required property string reference
-                required property string source
-                required property var evidence
-                required property bool highlighted
-                required property var highlightTargets
-
-                width: issueList.width - issueList.leftMargin - issueList.rightMargin
-                implicitHeight: issueBody.implicitHeight + 20
-                color: "#1e222a"
-                border.color: "#333845"
-                radius: 6
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                height: issueDelegate.expanded ? expandedBody.implicitHeight + 12 : 70
+                radius: 8
+                color: {
+                    if (issueDelegate.expanded)
+                        return theme.surface
+                    if (collapsedMouse.containsMouse)
+                        return "#eef2fb"
+                    return theme.canvas
+                }
+                border.width: 1
+                border.color: issueDelegate.expanded
+                              ? root.severityColor(issueDelegate.severity)
+                              : "#c5d0de"
+                clip: true
 
                 Rectangle {
+                    width: 4
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
-                    width: 4
-                    radius: 2
-                    color: root.severityColor(severity)
+                    color: root.severityColor(issueDelegate.severity)
                 }
 
                 Column {
-                    id: issueBody
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.margins: 12
-                    anchors.leftMargin: 16
-                    spacing: 6
+                    id: expandedBody
+                    visible: issueDelegate.expanded
+                    width: parent.width
+                    topPadding: 16
+                    leftPadding: 16
+                    rightPadding: 16
+                    spacing: 10
 
-                    RowLayout {
-                        width: parent.width
-                        spacing: 8
+                    Item {
+                        width: parent.width - 32
+                        height: 44
+
+                        Column {
+                            anchors.left: parent.left
+                            anchors.right: badge.left
+                            anchors.rightMargin: 8
+                            spacing: 4
+
+                            Text {
+                                width: parent.width
+                                text: root.issueCode(issueDelegate.title)
+                                color: theme.text
+                                font.pixelSize: 18
+                                font.family: theme.mono
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                width: parent.width
+                                text: {
+                                    const parts = []
+                                    if (issueDelegate.severity === "error")
+                                        parts.push("ABSOLUTE MAXIMUM")
+                                    else
+                                        parts.push(root.severityLabel(issueDelegate.severity))
+                                    if (issueDelegate.reference.length > 0)
+                                        parts.push(issueDelegate.reference)
+                                    return parts.join(" · ")
+                                }
+                                color: theme.muted
+                                font.pixelSize: 10
+                                font.family: theme.mono
+                                elide: Text.ElideRight
+                            }
+                        }
 
                         Text {
-                            text: root.severityLabel(severity)
-                            color: root.severityColor(severity)
-                            font.pixelSize: 11
+                            id: badge
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.topMargin: 4
+                            text: root.severityLabel(issueDelegate.severity)
+                            color: root.severityColor(issueDelegate.severity)
+                            font.pixelSize: 10
+                            font.family: theme.mono
                             font.weight: Font.DemiBold
                         }
+                    }
+
+                    Rectangle {
+                        width: parent.width - 32
+                        implicitHeight: headline.implicitHeight + 24
+                        color: root.severityFill(issueDelegate.severity)
+                        border.color: root.severityColor(issueDelegate.severity)
+                        radius: 3
 
                         Text {
-                            visible: reference.length > 0
-                            text: reference
-                            color: "#c5cad3"
-                            font.pixelSize: 12
-                            font.family: "monospace"
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Button {
-                            text: "Dismiss"
-                            onClicked: agentController.dismissIssueAt(index)
-                            background: Rectangle {
-                                color: parent.down ? "#3a2428" : "#2c3340"
-                                border.color: "#5a3338"
-                                radius: 4
-                            }
-                            contentItem: Text {
-                                text: parent.text
-                                color: "#e8eaed"
-                                font.pixelSize: 11
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                            implicitWidth: 72
-                            implicitHeight: 22
-                        }
-
-                        Button {
-                            text: "Solve"
-                            enabled: agentController
-                                     && !agentController.busy
-                                     && !agentController.awaitingDecision
-                                     && analysisController
-                                     && analysisController.projectId.length > 0
-                            onClicked: {
-                                agentController.solveIssueAt(index)
-                                if (appController)
-                                    appController.selectTab("chat")
-                            }
-                            background: Rectangle {
-                                color: parent.enabled
-                                       ? (parent.down ? "#2f7a52" : "#2d6b4f")
-                                       : "#2a303b"
-                                radius: 4
-                            }
-                            contentItem: Text {
-                                text: parent.text
-                                color: parent.enabled ? "#ffffff" : "#6d737c"
-                                font.pixelSize: 11
-                                font.weight: Font.DemiBold
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                            implicitWidth: 64
-                            implicitHeight: 22
+                            id: headline
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.margins: 12
+                            text: issueDelegate.title
+                            color: root.severityColor(issueDelegate.severity)
+                            font.pixelSize: 11
+                            font.family: theme.mono
+                            font.weight: Font.DemiBold
+                            wrapMode: Text.Wrap
                         }
                     }
 
                     Text {
-                        text: title
-                        color: "#e8eaed"
-                        font.pixelSize: 13
-                        font.weight: Font.DemiBold
+                        visible: root.evidenceLine(issueDelegate.evidence).length > 0
+                                 || issueDelegate.source.length > 0
+                        width: parent.width - 32
+                        text: root.evidenceLine(issueDelegate.evidence) || issueDelegate.source
+                        color: theme.muted
+                        font.pixelSize: 10
+                        font.family: theme.mono
                         wrapMode: Text.Wrap
-                        width: parent.width
                     }
 
-                    Text {
-                        text: description
-                        color: "#c5cad3"
-                        font.pixelSize: 13
-                        wrapMode: Text.Wrap
-                        width: parent.width
-                    }
+                    Column {
+                        width: parent.width - 32
+                        spacing: 10
 
-                    Row {
-                        spacing: 8
-                        width: parent.width
+                        RowLayout {
+                            width: parent.width
+                            spacing: 8
 
-                        Switch {
-                            id: highlightSwitch
-                            checked: highlighted
-                            enabled: highlightTargets.length > 0
-                            onClicked: agentController.toggleIssueHighlightAt(index)
-                            indicator: Rectangle {
-                                implicitWidth: 32
-                                implicitHeight: 18
-                                x: highlightSwitch.leftPadding
-                                y: parent.height / 2 - height / 2
-                                radius: 9
-                                color: highlightSwitch.checked ? "#2d6b4f" : "#2a303b"
-                                border.color: highlightSwitch.checked ? "#3ecf8e" : "#333845"
-
-                                Rectangle {
-                                    x: highlightSwitch.checked ? parent.width - width - 2 : 2
-                                    y: 2
-                                    width: 14
-                                    height: 14
-                                    radius: 7
-                                    color: highlightSwitch.enabled ? "#e8eaed" : "#6d737c"
+                            OutlineButton {
+                                text: "Open datasheet"
+                                implicitWidth: 118
+                                enabled: issueDelegate.primaryEvidence && issueDelegate.primaryEvidence.canOpen && evidencePreview
+                                onClicked: {
+                                    const ev = issueDelegate.primaryEvidence
+                                    if (!ev || !evidencePreview)
+                                        return
+                                    evidencePreview.openUrl(ev.url, ev.pageNumber, ev.document, ev.coordinates)
                                 }
                             }
-                            implicitWidth: 36
-                            implicitHeight: 22
+
+                            OutlineButton {
+                                text: issueDelegate.highlighted ? "Highlighted" : "Highlight schematic"
+                                implicitWidth: issueDelegate.highlighted ? 92 : 140
+                                enabled: issueDelegate.highlightTargets.length > 0
+                                fill: issueDelegate.highlighted ? "#eef2fb" : "#ffffff"
+                                onClicked: {
+                                    agentController.toggleIssueHighlightAt(issueDelegate.index)
+                                    if (appController)
+                                        appController.selectTab("schematic")
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
                         }
 
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: highlightTargets.length > 0
-                                  ? "Highlight in schematic  ·  " + highlightTargets.join(", ")
-                                  : "Highlight in schematic"
-                            color: highlightSwitch.enabled ? "#c5cad3" : "#6d737c"
-                            font.pixelSize: 12
+                        Rectangle {
+                            width: parent.width
+                            height: 1
+                            color: theme.border
+                        }
+
+                        RowLayout {
+                            width: parent.width
+                            spacing: 8
+
+                            Item { Layout.fillWidth: true }
+
+                            Rectangle {
+                                implicitWidth: actionRow.implicitWidth + 12
+                                implicitHeight: 40
+                                radius: 6
+                                color: theme.canvas
+                                border.color: theme.border
+
+                                Row {
+                                    id: actionRow
+                                    anchors.centerIn: parent
+                                    spacing: 6
+
+                                    OutlineButton {
+                                        text: "Dismiss"
+                                        implicitWidth: 72
+                                        labelColor: theme.muted
+                                        onClicked: agentController.dismissIssueAt(issueDelegate.index)
+                                    }
+
+                                    OutlineButton {
+                                        text: "Solve"
+                                        implicitWidth: 64
+                                        labelColor: theme.surface
+                                        fill: "#194df1"
+                                        stroke: "#194df1"
+                                        enabled: agentController
+                                                 && !agentController.busy
+                                                 && !agentController.awaitingDecision
+                                                 && analysisController
+                                                 && analysisController.projectId.length > 0
+                                        onClicked: {
+                                            root.activateIssue(
+                                                issueDelegate.index,
+                                                issueDelegate.title,
+                                                issueDelegate.reference,
+                                                issueDelegate.source,
+                                                issueDelegate.description,
+                                                issueDelegate.severity
+                                            )
+                                            agentController.solveIssueAt(issueDelegate.index)
+                                            if (appController)
+                                                appController.selectTab("chat")
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
                     Text {
-                        visible: source.length > 0
-                        text: "Issue source: " + source
-                        color: "#9aa0a6"
+                        width: parent.width - 32
+                        text: root.whyLabel(issueDelegate.severity)
+                        color: theme.muted
+                        font.pixelSize: 10
+                        font.family: theme.sans
+                        font.weight: Font.Bold
+                    }
+
+                    Text {
+                        width: parent.width - 32
+                        text: issueDelegate.description
+                        color: theme.text
                         font.pixelSize: 11
+                        font.family: theme.sans
                         wrapMode: Text.Wrap
-                        width: parent.width
+                        lineHeight: 17
+                        lineHeightMode: Text.FixedHeight
+                    }
+
+                    Text {
+                        visible: issueDelegate.evidence && issueDelegate.evidence.length > 0
+                        width: parent.width - 32
+                        topPadding: 8
+                        text: "SOURCE EVIDENCE"
+                        color: theme.muted
+                        font.pixelSize: 10
+                        font.family: theme.sans
+                        font.weight: Font.Bold
                     }
 
                     Repeater {
-                        model: evidence
+                        model: issueDelegate.evidence
 
                         Rectangle {
+                            id: evidenceCard
                             required property var modelData
-                            width: issueBody.width
-                            implicitHeight: evCol.implicitHeight + 16
-                            color: "#16181d"
-                            border.color: modelData.canOpen ? "#3d5a80" : "#333845"
+                            width: expandedBody.width - 32
+                            implicitHeight: evCol.implicitHeight + 20
+                            color: evidenceMouse.containsMouse && modelData.canOpen ? "#eef2fb" : theme.subtle
+                            border.color: {
+                                if (!modelData.canOpen)
+                                    return theme.border
+                                return evidenceMouse.containsMouse ? theme.brand : "#9eb0c9"
+                            }
+                            border.width: modelData.canOpen ? 1.5 : 1
                             radius: 4
 
                             Column {
@@ -265,179 +382,100 @@ Rectangle {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.top: parent.top
-                                anchors.margins: 8
-                                spacing: 8
+                                anchors.margins: 12
+                                spacing: 6
 
-                                Row {
+                                RowLayout {
                                     width: parent.width
                                     spacing: 8
 
                                     Text {
-                                        text: "EVIDENCE"
-                                        color: "#5b9fd4"
-                                        font.pixelSize: 10
-                                        font.letterSpacing: 0.6
-                                        font.weight: Font.DemiBold
-                                    }
-
-                                    Text {
-                                        visible: modelData.canOpen
-                                        text: modelData.pageNumber > 0
-                                              ? "Tap to open PDF  ·  p." + modelData.pageNumber
-                                              : "Tap to open PDF"
-                                        color: "#5b9fd4"
-                                        font.pixelSize: 10
-                                    }
-                                }
-
-                                Column {
-                                    width: parent.width
-                                    spacing: 4
-
-                                    Text {
-                                        text: "Excerpt"
-                                        color: "#e8eaed"
-                                        font.pixelSize: 11
-                                        font.weight: Font.DemiBold
-                                    }
-
-                                    Text {
-                                        text: "Quoted passage used to support this issue."
-                                        color: "#6d737c"
-                                        font.pixelSize: 11
-                                        wrapMode: Text.Wrap
-                                        width: parent.width
-                                    }
-
-                                    SelectableText {
-                                        width: parent.width
-                                        text: modelData.content.length > 0
-                                              ? modelData.content
-                                              : "(empty excerpt)"
-                                        color: "#c5cad3"
-                                        font.pixelSize: 12
-                                    }
-                                }
-
-                                Column {
-                                    width: parent.width
-                                    spacing: 4
-
-                                    Text {
-                                        text: "Source"
-                                        color: "#e8eaed"
-                                        font.pixelSize: 11
-                                        font.weight: Font.DemiBold
-                                    }
-
-                                    Text {
-                                        text: "Where this excerpt came from."
-                                        color: "#6d737c"
-                                        font.pixelSize: 11
-                                        wrapMode: Text.Wrap
-                                        width: parent.width
-                                    }
-
-                                    Text {
-                                        visible: modelData.source.length > 0
-                                        text: "Kind: " + modelData.source
-                                        color: "#c5cad3"
-                                        font.pixelSize: 12
-                                        wrapMode: Text.Wrap
-                                        width: parent.width
-                                    }
-
-                                    Text {
-                                        visible: modelData.document.length > 0
-                                        text: "Document: " + modelData.document
-                                        color: "#c5cad3"
-                                        font.pixelSize: 12
-                                        wrapMode: Text.Wrap
-                                        width: parent.width
-                                    }
-
-                                    Text {
-                                        visible: modelData.location.length > 0
-                                        text: "Location: " + modelData.location
-                                        color: "#c5cad3"
-                                        font.pixelSize: 12
-                                        wrapMode: Text.Wrap
-                                        width: parent.width
-                                    }
-
-                                    Text {
-                                        visible: modelData.confidence.length > 0
-                                        text: "Confidence: " + modelData.confidence
-                                        color: "#c5cad3"
-                                        font.pixelSize: 12
-                                    }
-
-                                    Text {
-                                        visible: modelData.url.length > 0
-                                        text: "PDF: " + modelData.url
-                                        color: "#5b9fd4"
-                                        font.pixelSize: 12
-                                        wrapMode: Text.Wrap
-                                        width: parent.width
-                                    }
-
-                                    Repeater {
-                                        model: modelData.extras
-                                        Text {
-                                            required property string modelData
-                                            width: evCol.width
-                                            text: modelData
-                                            color: "#9aa0a6"
-                                            font.pixelSize: 12
-                                            wrapMode: Text.Wrap
+                                        Layout.fillWidth: true
+                                        text: {
+                                            const bits = []
+                                            if (modelData.document)
+                                                bits.push(modelData.document)
+                                            if (modelData.source)
+                                                bits.push(modelData.source)
+                                            return bits.join(" · ")
                                         }
+                                        color: theme.muted
+                                        font.pixelSize: 8
+                                        font.family: theme.mono
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Text {
+                                        visible: modelData.page.length > 0
+                                        text: modelData.page
+                                        color: theme.brand
+                                        font.pixelSize: 8
+                                        font.family: theme.mono
                                     }
                                 }
 
-                                Column {
+                                Text {
+                                    visible: modelData.section.length > 0
                                     width: parent.width
-                                    spacing: 4
+                                    text: modelData.section
+                                    color: theme.text
+                                    font.pixelSize: 12
+                                    font.family: theme.sans
+                                    font.weight: Font.Bold
+                                    wrapMode: Text.Wrap
+                                }
 
-                                    Text {
-                                        text: "Original JSON"
-                                        color: "#e8eaed"
-                                        font.pixelSize: 11
-                                        font.weight: Font.DemiBold
-                                    }
+                                Text {
+                                    width: parent.width
+                                    text: modelData.content.length > 0 ? modelData.content : "(empty excerpt)"
+                                    color: theme.muted
+                                    font.pixelSize: 9
+                                    font.family: theme.sans
+                                    wrapMode: Text.Wrap
+                                }
 
-                                    Text {
-                                        text: "Payload as received from the analysis API."
-                                        color: "#6d737c"
-                                        font.pixelSize: 11
-                                        wrapMode: Text.Wrap
-                                        width: parent.width
-                                    }
+                                Text {
+                                    visible: modelData.location.length > 0
+                                    text: modelData.location
+                                    color: theme.muted
+                                    font.pixelSize: 8
+                                    font.family: theme.mono
+                                }
 
-                                    Rectangle {
-                                        width: parent.width
-                                        implicitHeight: jsonText.height + 12
-                                        color: "#12141a"
-                                        border.color: "#333845"
-                                        radius: 4
+                                Rectangle {
+                                    visible: modelData.canOpen
+                                    width: parent.width
+                                    implicitHeight: 28
+                                    radius: 4
+                                    color: evidenceMouse.containsMouse ? "#dce6fb" : "#eef2fb"
+                                    border.color: theme.brand
 
-                                        SelectableText {
-                                            id: jsonText
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.top: parent.top
-                                            anchors.margins: 6
-                                            text: modelData.json
-                                            color: "#c5cad3"
-                                            font.pixelSize: 11
-                                            font.family: "monospace"
+                                    Row {
+                                        anchors.centerIn: parent
+                                        spacing: 6
+
+                                        Text {
+                                            text: "Open datasheet"
+                                            color: theme.brand
+                                            font.pixelSize: 10
+                                            font.family: theme.sans
+                                            font.weight: Font.DemiBold
+                                        }
+
+                                        Text {
+                                            text: "↗"
+                                            color: theme.brand
+                                            font.pixelSize: 12
+                                            font.family: theme.sans
+                                            font.weight: Font.DemiBold
                                         }
                                     }
                                 }
                             }
 
                             MouseArea {
+                                id: evidenceMouse
                                 anchors.fill: parent
-                                z: 1
                                 enabled: modelData.canOpen && evidencePreview
                                 hoverEnabled: enabled
                                 cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
@@ -445,29 +483,104 @@ Rectangle {
                                     modelData.url,
                                     modelData.pageNumber,
                                     modelData.document,
-                                    modelData.content
+                                    modelData.coordinates
                                 )
                             }
                         }
                     }
                 }
-            }
 
-            Text {
-                anchors.centerIn: parent
-                visible: issueList.count === 0
-                text: "No circuit issues"
-                color: "#9aa0a6"
-                font.pixelSize: 12
+                Item {
+                    visible: !issueDelegate.expanded
+                    anchors.fill: parent
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
+
+                    Text {
+                        id: failMark
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.topMargin: 21
+                        text: issueDelegate.severity === "info" ? "i" : "×"
+                        color: root.severityColor(issueDelegate.severity)
+                        font.pixelSize: 15
+                        font.family: theme.mono
+                        font.weight: Font.DemiBold
+                    }
+
+                    Column {
+                        anchors.left: failMark.right
+                        anchors.leftMargin: 10
+                        anchors.right: collapsedRight.left
+                        anchors.rightMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: root.issueCode(issueDelegate.title)
+                            color: theme.text
+                            font.pixelSize: 11
+                            font.family: theme.mono
+                            font.weight: Font.DemiBold
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: {
+                                const parts = [root.severityLabel(issueDelegate.severity)]
+                                if (issueDelegate.reference.length > 0)
+                                    parts.push(issueDelegate.reference)
+                                return parts.join(" · ")
+                            }
+                            color: theme.muted
+                            font.pixelSize: 9
+                            font.family: theme.mono
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Text {
+                        id: collapsedRight
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.topMargin: 21
+                        width: Math.min(120, implicitWidth)
+                        text: issueDelegate.title
+                        color: root.severityColor(issueDelegate.severity)
+                        font.pixelSize: 10
+                        font.family: theme.mono
+                        font.weight: Font.Medium
+                        elide: Text.ElideRight
+                        horizontalAlignment: Text.AlignRight
+                    }
+
+                    MouseArea {
+                        id: collapsedMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.activateIssue(
+                            issueDelegate.index,
+                            issueDelegate.title,
+                            issueDelegate.reference,
+                            issueDelegate.source,
+                            issueDelegate.description,
+                            issueDelegate.severity
+                        )
+                    }
+                }
             }
         }
-    }
 
-    Rectangle {
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        width: 1
-        color: "#333845"
+        Text {
+            anchors.centerIn: parent
+            visible: issueList.count === 0
+            text: "No circuit issues"
+            color: theme.muted
+            font.pixelSize: 12
+            font.family: theme.sans
+        }
     }
 }

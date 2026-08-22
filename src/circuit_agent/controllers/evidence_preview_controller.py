@@ -7,6 +7,7 @@ import logging
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 
 from circuit_agent.application.async_runner import AsyncRunner
+from circuit_agent.models.evidence import parse_evidence_boxes
 from circuit_agent.services.pdf_preview import PdfPreviewError, preview_datasheet
 
 logger = logging.getLogger("circuit_agent.evidence")
@@ -59,11 +60,12 @@ class EvidencePreviewController(QObject):
     def highlighted(self) -> bool:
         return bool(self._highlights)
 
-    @Slot(str, int, str, str)
-    def openUrl(self, url: str, page: int, title: str, excerpt: str = "") -> None:
+    @Slot(str, int, str, "QVariant")
+    def openUrl(self, url: str, page: int, title: str, coordinates=None) -> None:
         target = (url or "").strip()
         if not target:
             return
+        boxes = parse_evidence_boxes(_js_value(coordinates))
         self._request_id += 1
         request_id = self._request_id
         self._open = True
@@ -74,9 +76,14 @@ class EvidencePreviewController(QObject):
         self._title = (title or "").strip() or "Datasheet"
         self._page_label = f"Page {page}" if page >= 1 else "Page 1"
         self.previewChanged.emit()
-        logger.info("Opening datasheet preview %s p.%s", target, page or 1)
+        logger.info(
+            "Opening datasheet preview %s p.%s (%s highlight box(es))",
+            target,
+            page or 1,
+            len(boxes),
+        )
         self._runner.submit(
-            preview_datasheet(target, page if page >= 1 else None, excerpt or ""),
+            preview_datasheet(target, page if page >= 1 else None, boxes),
             on_success=lambda result, rid=request_id: self._on_ready(rid, result),
             on_error=lambda exc, rid=request_id: self._on_error(rid, exc),
         )
@@ -99,7 +106,7 @@ class EvidencePreviewController(QObject):
         self._error = ""
         self._image_url = QUrl.fromLocalFile(str(result.image_path)).toString()
         self._highlights = list(result.highlights)
-        suffix = "  ·  excerpt highlighted" if result.highlights else ""
+        suffix = "  ·  source highlighted" if result.highlights else ""
         self._page_label = f"Page {result.page} of {result.page_count}{suffix}"
         self.previewChanged.emit()
 
@@ -112,3 +119,24 @@ class EvidencePreviewController(QObject):
         self._error = str(exc) if isinstance(exc, PdfPreviewError) else f"Could not open PDF: {exc}"
         logger.error("Datasheet preview failed: %s", exc)
         self.previewChanged.emit()
+
+
+def _js_value(value: object) -> object:
+    """Unwrap QML/JS values so evidence coordinates parse as Python lists."""
+
+    if value is None:
+        return None
+    to_variant = getattr(value, "toVariant", None)
+    if callable(to_variant):
+        value = to_variant()
+    value_of = getattr(value, "value", None)
+    if callable(value_of) and not isinstance(value, (str, bytes, dict, list, tuple)):
+        try:
+            value = value_of()
+        except TypeError:
+            pass
+    if isinstance(value, dict):
+        return {str(key): _js_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_js_value(item) for item in value]
+    return value

@@ -12,9 +12,9 @@ TextEdit {
     persistentSelection: true
     wrapMode: TextEdit.Wrap
     textFormat: markdown ? TextEdit.MarkdownText : TextEdit.PlainText
-    color: "#e8eaed"
-    selectedTextColor: "#ffffff"
-    selectionColor: "#3d5a80"
+    color: "#0e1b36"
+    selectedTextColor: "#0e1b36"
+    selectionColor: "#c9d7f8"
     font.pixelSize: 13
     activeFocusOnPress: true
     height: contentHeight

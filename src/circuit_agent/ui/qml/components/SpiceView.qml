@@ -2,10 +2,13 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import ".."
 
 Rectangle {
     id: root
-    color: "#16181d"
+    color: "#ffffff"
+
+    Theme { id: theme }
 
     ColumnLayout {
         anchors.fill: parent
@@ -13,20 +16,20 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 36
-            color: "#1e222a"
+            Layout.preferredHeight: 48
+            color: theme.surface
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 14
-                anchors.rightMargin: 10
+                anchors.leftMargin: 22
+                anchors.rightMargin: 20
                 spacing: 8
 
                 Text {
                     text: "SPICE"
-                    color: "#9aa0a6"
-                    font.pixelSize: 11
-                    font.letterSpacing: 0.8
+                    color: theme.muted
+                    font.pixelSize: 12
+                    font.family: theme.mono
                     font.weight: Font.DemiBold
                 }
 
@@ -35,8 +38,9 @@ Rectangle {
                 Text {
                     visible: spiceController && spiceController.hasResult
                     text: spiceController && spiceController.ok ? "OK" : "Failed"
-                    color: spiceController && spiceController.ok ? "#3ecf8e" : "#e05d5d"
+                    color: spiceController && spiceController.ok ? theme.success : theme.danger
                     font.pixelSize: 11
+                    font.family: theme.mono
                     font.weight: Font.DemiBold
                 }
             }
@@ -46,14 +50,14 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: 1
-                color: "#333845"
+                color: theme.border
             }
         }
 
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: controls.implicitHeight + 20
-            color: "#1e222a"
+            color: theme.subtle
 
             ColumnLayout {
                 id: controls
@@ -68,8 +72,9 @@ Rectangle {
 
                     Text {
                         text: "Analysis"
-                        color: "#9aa0a6"
+                        color: theme.muted
                         font.pixelSize: 12
+                        font.family: theme.sans
                     }
 
                     ComboBox {
@@ -83,31 +88,20 @@ Rectangle {
 
                     Item { Layout.fillWidth: true }
 
-                    Button {
+                    OutlineButton {
                         text: spiceController && spiceController.running ? "Running…" : "Run"
                         enabled: spiceController && !spiceController.running
+                        implicitWidth: 88
+                        implicitHeight: 28
+                        labelColor: "#ffffff"
+                        fill: theme.success
+                        stroke: theme.success
                         onClicked: {
                             if (!spiceController)
                                 return
                             spiceController.setInstructions(instructionField.text)
                             spiceController.run()
                         }
-                        background: Rectangle {
-                            color: parent.enabled
-                                   ? (parent.down ? "#2f7a52" : "#2d6b4f")
-                                   : "#2a303b"
-                            radius: 4
-                        }
-                        contentItem: Text {
-                            text: parent.text
-                            color: parent.enabled ? "#ffffff" : "#6d737c"
-                            font.pixelSize: 12
-                            font.weight: Font.DemiBold
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        implicitWidth: 88
-                        implicitHeight: 28
                     }
                 }
 
@@ -115,11 +109,11 @@ Rectangle {
                     id: instructionField
                     Layout.fillWidth: true
                     placeholderText: "Optional ngspice card, e.g. tran 1u 10m"
-                    color: "#e8eaed"
-                    placeholderTextColor: "#6d737c"
+                    color: theme.text
+                    placeholderTextColor: theme.muted
                     background: Rectangle {
-                        color: "#16181d"
-                        border.color: instructionField.activeFocus ? "#5b9fd4" : "#333845"
+                        color: theme.surface
+                        border.color: instructionField.activeFocus ? theme.brand : theme.border
                         radius: 4
                     }
                     leftPadding: 10
@@ -130,7 +124,7 @@ Rectangle {
                 Text {
                     Layout.fillWidth: true
                     wrapMode: Text.Wrap
-                    color: "#6d737c"
+                    color: theme.muted
                     font.pixelSize: 11
                     text: "Exports the open schematic with kicad-cli and runs KiCad’s libngspice. Schematics without models or sources will fail."
                 }
@@ -145,7 +139,7 @@ Rectangle {
             Rectangle {
                 SplitView.preferredHeight: 88
                 SplitView.minimumHeight: 56
-                color: "#16181d"
+                color: theme.surface
 
                 Column {
                     anchors.fill: parent
@@ -156,7 +150,7 @@ Rectangle {
                         text: spiceController && spiceController.hasResult
                               ? spiceController.summary
                               : "No run yet."
-                        color: "#e8eaed"
+                        color: theme.text
                         wrapMode: Text.Wrap
                         width: parent.width
                         font.pixelSize: 13
@@ -174,8 +168,7 @@ Rectangle {
                                 parts.push(spiceController.command)
                             return parts.join("  ·  ")
                         }
-                        color: "#9aa0a6"
-                        font.pixelSize: 11
+                        color: theme.muted
                     }
                 }
             }
@@ -183,7 +176,7 @@ Rectangle {
             Rectangle {
                 SplitView.fillHeight: true
                 SplitView.minimumHeight: 80
-                color: "#16181d"
+                color: theme.surface
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -193,9 +186,9 @@ Rectangle {
                         Layout.leftMargin: 14
                         Layout.topMargin: 8
                         text: "LOG"
-                        color: "#9aa0a6"
+                        color: theme.muted
                         font.pixelSize: 10
-                        font.letterSpacing: 0.6
+                        font.family: theme.mono
                         font.weight: Font.DemiBold
                     }
 
@@ -214,9 +207,9 @@ Rectangle {
                             width: parent.width - 28
                             height: contentHeight
                             text: spiceController ? spiceController.log : ""
-                            color: "#c5cad3"
+                            color: theme.text
                             font.pixelSize: 12
-                            font.family: "monospace"
+                            font.family: theme.mono
                         }
                     }
                 }
@@ -225,7 +218,7 @@ Rectangle {
             Rectangle {
                 SplitView.preferredHeight: 140
                 SplitView.minimumHeight: 72
-                color: "#16181d"
+                color: theme.surface
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -235,9 +228,9 @@ Rectangle {
                         Layout.leftMargin: 14
                         Layout.topMargin: 8
                         text: "NETLIST"
-                        color: "#9aa0a6"
+                        color: theme.muted
                         font.pixelSize: 10
-                        font.letterSpacing: 0.6
+                        font.family: theme.mono
                         font.weight: Font.DemiBold
                     }
 
@@ -256,9 +249,9 @@ Rectangle {
                             width: parent.width - 28
                             height: contentHeight
                             text: spiceController ? spiceController.netlist : ""
-                            color: "#9aa0a6"
+                            color: theme.muted
                             font.pixelSize: 12
-                            font.family: "monospace"
+                            font.family: theme.mono
                         }
                     }
                 }

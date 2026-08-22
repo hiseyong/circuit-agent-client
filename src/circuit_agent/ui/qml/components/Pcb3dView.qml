@@ -2,10 +2,13 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import ".."
 
 Rectangle {
     id: root
-    color: "#1e222a"
+    color: "#fbfcfe"
+
+    Theme { id: theme }
 
     property real zoom: 1.0
     property real nativeW: 1
@@ -48,27 +51,28 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 36
-            color: "#1e222a"
+            Layout.preferredHeight: 48
+            color: theme.surface
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 14
-                anchors.rightMargin: 10
+                anchors.leftMargin: 22
+                anchors.rightMargin: 20
                 spacing: 8
 
                 Text {
                     text: "PCB 3D"
-                    color: "#9aa0a6"
-                    font.pixelSize: 11
-                    font.letterSpacing: 0.8
+                    color: theme.muted
+                    font.pixelSize: 12
+                    font.family: theme.mono
                     font.weight: Font.DemiBold
                 }
 
                 Text {
                     text: "kicad-cli still image"
-                    color: "#6d737c"
-                    font.pixelSize: 11
+                    color: theme.muted
+                    font.pixelSize: 10
+                    font.family: theme.mono
                 }
 
                 Item { Layout.fillWidth: true }
@@ -81,50 +85,29 @@ Rectangle {
                         { "id": "front", "label": "Front" }
                     ]
 
-                    Button {
+                    OutlineButton {
                         required property var modelData
                         text: modelData.label
                         enabled: kicadController && !kicadController.pcbBusy
+                        implicitHeight: 28
+                        implicitWidth: modelData.id === "bottom" ? 60 : 52
+                        labelColor: kicadController && kicadController.pcbView === modelData.id
+                                    ? theme.brand : theme.text
+                        fill: kicadController && kicadController.pcbView === modelData.id
+                              ? "#eef2fb" : "#ffffff"
+                        stroke: kicadController && kicadController.pcbView === modelData.id
+                                ? theme.brand : theme.border
                         onClicked: kicadController.setPcbView(modelData.id)
-                        background: Rectangle {
-                            color: kicadController && kicadController.pcbView === modelData.id
-                                   ? "#2a3f5f"
-                                   : (parent.down ? "#2c3340" : "#252a33")
-                            border.color: kicadController && kicadController.pcbView === modelData.id
-                                          ? "#3d5f86"
-                                          : "#333845"
-                            radius: 4
-                        }
-                        contentItem: Text {
-                            text: parent.text
-                            color: parent.enabled ? "#e8eaed" : "#6d737c"
-                            font.pixelSize: 12
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        implicitHeight: 22
-                        implicitWidth: 56
                     }
                 }
 
-                Button {
+                OutlineButton {
                     text: kicadController && kicadController.pcbBusy ? "Rendering…" : "Render"
                     enabled: kicadController && !kicadController.pcbBusy
+                    implicitHeight: 28
+                    implicitWidth: 66
+                    labelColor: theme.text
                     onClicked: kicadController.refreshPcb()
-                    background: Rectangle {
-                        color: parent.down ? "#2c3340" : "#252a33"
-                        border.color: "#333845"
-                        radius: 4
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        color: parent.enabled ? "#e8eaed" : "#6d737c"
-                        font.pixelSize: 12
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    implicitHeight: 22
-                    implicitWidth: 76
                 }
             }
 
@@ -133,14 +116,14 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: 1
-                color: "#333845"
+                color: theme.border
             }
         }
 
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: "#2a2d33"
+            color: theme.canvas
 
             Flickable {
                 id: flick
@@ -201,7 +184,7 @@ Rectangle {
                     width: parent.width
                     wrapMode: Text.Wrap
                     horizontalAlignment: Text.AlignHCenter
-                    color: "#9aa0a6"
+                    color: theme.muted
                     font.pixelSize: 13
                     text: {
                         if (kicadController && kicadController.pcbBusy)

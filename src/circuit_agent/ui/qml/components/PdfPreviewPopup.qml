@@ -26,8 +26,8 @@ Popup {
     }
 
     background: Rectangle {
-        color: "#1e222a"
-        border.color: "#333845"
+        color: "#ffffff"
+        border.color: "#dae2ed"
         radius: 8
     }
 
@@ -46,7 +46,7 @@ Popup {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
-            color: "#16181d"
+            color: "#ffffff"
 
             RowLayout {
                 anchors.fill: parent
@@ -56,7 +56,7 @@ Popup {
 
                 Text {
                     text: evidencePreview ? evidencePreview.title : "Datasheet"
-                    color: "#e8eaed"
+                    color: "#0e1b36"
                     font.pixelSize: 13
                     font.weight: Font.DemiBold
                     elide: Text.ElideMiddle
@@ -66,7 +66,7 @@ Popup {
                 Text {
                     visible: evidencePreview && evidencePreview.pageLabel.length > 0
                     text: evidencePreview ? evidencePreview.pageLabel : ""
-                    color: evidencePreview && evidencePreview.highlighted ? "#e6b84d" : "#9aa0a6"
+                    color: evidencePreview && evidencePreview.highlighted ? "#194df1" : "#445674"
                     font.pixelSize: 11
                 }
 
@@ -74,13 +74,13 @@ Popup {
                     text: "−"
                     onClicked: root.setZoom(root.zoom / 1.25)
                     background: Rectangle {
-                        color: parent.down ? "#2c3340" : "#252a33"
-                        border.color: "#333845"
+                        color: parent.down ? "#eef2fb" : "#ffffff"
+                        border.color: "#dae2ed"
                         radius: 4
                     }
                     contentItem: Text {
                         text: parent.text
-                        color: "#e8eaed"
+                        color: "#0e1b36"
                         font.pixelSize: 16
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -91,7 +91,7 @@ Popup {
 
                 Text {
                     text: Math.round(root.zoom * 100) + "%"
-                    color: "#9aa0a6"
+                    color: "#445674"
                     font.pixelSize: 11
                     font.family: "monospace"
                 }
@@ -100,13 +100,13 @@ Popup {
                     text: "+"
                     onClicked: root.setZoom(root.zoom * 1.25)
                     background: Rectangle {
-                        color: parent.down ? "#2c3340" : "#252a33"
-                        border.color: "#333845"
+                        color: parent.down ? "#eef2fb" : "#ffffff"
+                        border.color: "#dae2ed"
                         radius: 4
                     }
                     contentItem: Text {
                         text: parent.text
-                        color: "#e8eaed"
+                        color: "#0e1b36"
                         font.pixelSize: 16
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -119,13 +119,13 @@ Popup {
                     text: "Close"
                     onClicked: root.close()
                     background: Rectangle {
-                        color: parent.down ? "#2c3340" : "#252a33"
-                        border.color: "#333845"
+                        color: parent.down ? "#eef2fb" : "#ffffff"
+                        border.color: "#dae2ed"
                         radius: 4
                     }
                     contentItem: Text {
                         text: parent.text
-                        color: "#e8eaed"
+                        color: "#0e1b36"
                         font.pixelSize: 11
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -145,7 +145,7 @@ Popup {
                 anchors.centerIn: parent
                 visible: evidencePreview && evidencePreview.loading
                 text: "Loading datasheet…"
-                color: "#9aa0a6"
+                color: "#445674"
                 font.pixelSize: 13
             }
 
@@ -154,7 +154,7 @@ Popup {
                 width: parent.width - 32
                 visible: evidencePreview && !evidencePreview.loading && evidencePreview.error.length > 0
                 text: evidencePreview ? evidencePreview.error : ""
-                color: "#e05d5d"
+                color: "#dc141e"
                 font.pixelSize: 12
                 wrapMode: Text.Wrap
                 horizontalAlignment: Text.AlignHCenter
@@ -199,18 +199,28 @@ Popup {
                     }
 
                     Repeater {
+                        // Do not bind model roles named `x`/`y` onto Rectangle —
+                        // API boxes are page-normalized (0–1), so those roles
+                        // would place the overlay at ~0.1px. Index lookup only.
                         model: evidencePreview ? evidencePreview.highlights : []
 
-                        Rectangle {
-                            required property var modelData
-                            x: modelData.x * pageBox.width
-                            y: modelData.y * pageBox.height
-                            width: modelData.w * pageBox.width
-                            height: modelData.h * pageBox.height
-                            color: "#66e6b84d"
-                            border.color: "#e6b84d"
-                            border.width: 1
-                            radius: 2
+                        Item {
+                            required property int index
+                            anchors.fill: parent
+                            z: 10
+                            readonly property var box: evidencePreview.highlights[index]
+
+                            Rectangle {
+                                visible: parent.box && parent.box.w > 0 && parent.box.h > 0
+                                x: parent.box.x * parent.width
+                                y: parent.box.y * parent.height
+                                width: parent.box.w * parent.width
+                                height: parent.box.h * parent.height
+                                color: "#40194df1"
+                                border.color: "#194df1"
+                                border.width: 2
+                                radius: 2
+                            }
                         }
                     }
                 }

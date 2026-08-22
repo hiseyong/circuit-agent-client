@@ -3,14 +3,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from circuit_agent.models.evidence import evidence_from_payload
-from circuit_agent.services.pdf_preview import (
-    PdfPreviewError,
-    excerpt_queries,
-    fetch_pdf,
-    find_excerpt_boxes,
-    render_pdf_page,
-)
+from circuit_agent.models.evidence import evidence_card, evidence_from_payload
+from circuit_agent.services.pdf_preview import PdfPreviewError, fetch_pdf, render_pdf_page
 
 MINIMAL_PDF = b"""%PDF-1.1
 1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
@@ -58,65 +52,35 @@ async def test_fetch_pdf_rejects_non_pdf(tmp_path: Path, monkeypatch: pytest.Mon
             await fetch_pdf("https://datasheets.test/page.html", client=client)
 
 
-def test_excerpt_queries_skip_netlist_dumps() -> None:
-    assert excerpt_queries("L1 nets=1_1: Net-(C1-Pad1)") == []
-    queries = excerpt_queries("Recommended input range is 3.0 V – 17 V.")
-    assert any("3.0 V" in item for item in queries)
-
-
-def _text_pdf(path: Path, text: str) -> None:
-    import ctypes
-
-    import pypdfium2 as pdfium
-    import pypdfium2.raw as pdfium_c
-
-    document = pdfium.PdfDocument.new()
-    page = document.new_page(width=320, height=200)
-    font = pdfium.PdfFont.load_standard(document, "Helvetica")
-    raw_obj = pdfium_c.FPDFPageObj_CreateTextObj(document, font, 16.0)
-    encoded = (text + "\x00").encode("utf-16-le")
-    pdfium_c.FPDFText_SetText(raw_obj, ctypes.cast(encoded, ctypes.POINTER(ctypes.c_ushort)))
-    pdfium_c.FPDFPageObj_Transform(raw_obj, 1, 0, 0, 1, 30, 90)
-    pdfium_c.FPDFPage_InsertObject(page, raw_obj)
-    page.gen_content()
-    document.save(path)
-    document.close()
-
-
-def test_excerpt_highlights_matching_pdf_text(tmp_path: Path) -> None:
+def test_render_uses_api_coordinates_not_excerpt(tmp_path: Path) -> None:
     try:
         import pypdfium2 as pdfium
     except ImportError:
         pytest.skip("pypdfium2 is not installed")
-    pdf_path = tmp_path / "sheet.pdf"
-    _text_pdf(pdf_path, "Recommended input range is 3.0 V - 17 V.")
-    document = pdfium.PdfDocument(str(pdf_path))
-    try:
-        boxes = find_excerpt_boxes(document[0], "3.0 V – 17 V")
-    finally:
-        document.close()
-    assert boxes
-    box = boxes[0]
-    assert 0 <= box["x"] < 1
-    assert 0 <= box["y"] < 1
-    assert box["w"] > 0
-    assert box["h"] > 0
-    preview = render_pdf_page(pdf_path, 1, "3.0 V – 17 V")
-    assert preview.highlights
-
-
-def test_excerpt_highlights_skip_when_text_missing(tmp_path: Path) -> None:
-    try:
-        import pypdfium2 as pdfium
-    except ImportError:
-        pytest.skip("pypdfium2 is not installed")
-    pdf_path = tmp_path / "empty.pdf"
+    pdf_path = tmp_path / "source.pdf"
     document = pdfium.PdfDocument.new()
     document.new_page(width=180, height=180)
     document.save(pdf_path)
     document.close()
-    preview = render_pdf_page(pdf_path, 1, "3.0 V – 17 V")
-    assert preview.highlights == []
+
+    preview = render_pdf_page(
+        pdf_path,
+        1,
+        [
+            {"x": 0.10, "y": 0.20},
+            {"x": 0.40, "y": 0.20},
+            {"x": 0.40, "y": 0.30},
+            {"x": 0.10, "y": 0.30},
+        ],
+    )
+    assert len(preview.highlights) == 1
+    box = preview.highlights[0]
+    assert box["x"] == pytest.approx(0.10)
+    assert box["y"] == pytest.approx(0.20)
+    assert box["w"] == pytest.approx(0.30)
+    assert box["h"] == pytest.approx(0.10)
+    empty = render_pdf_page(pdf_path, 1, "3.0 V – 17 V")
+    assert empty.highlights == []
 
 
 def test_render_pdf_page_defaults_missing_page_to_first(tmp_path: Path) -> None:
@@ -136,7 +100,47 @@ def test_render_pdf_page_defaults_missing_page_to_first(tmp_path: Path) -> None:
     assert preview.image_path.is_file()
 
 
-def test_evidence_without_url_cannot_open() -> None:
+def test_open_url_keeps_api_coordinate_highlights(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PySide6.QtCore import QCoreApplication
+
+    from circuit_agent.controllers.evidence_preview_controller import (
+        EvidencePreviewController,
+    )
+    from circuit_agent.services.pdf_preview import PdfPagePreview
+    from test_analysis import ImmediateRunner
+
+    QCoreApplication.instance() or QCoreApplication([])
+    png = tmp_path / "page.png"
+    png.write_bytes(b"png")
+
+    async def fake_preview(url, page, coordinates=None, client=None):
+        from circuit_agent.models.evidence import parse_evidence_boxes
+
+        return PdfPagePreview(
+            image_path=png,
+            page=page or 1,
+            page_count=10,
+            highlights=parse_evidence_boxes(coordinates),
+        )
+
+    monkeypatch.setattr(
+        "circuit_agent.controllers.evidence_preview_controller.preview_datasheet",
+        fake_preview,
+    )
+    controller = EvidencePreviewController(ImmediateRunner())
+    boxes = [{"x": 0.10, "y": 0.20, "w": 0.30, "h": 0.10}]
+    controller.openUrl("https://datasheets.test/part.pdf", 5, "STM32L072KZ", boxes)
+    assert controller.highlighted is True
+    assert len(controller.highlights) == 1
+    assert controller.highlights[0]["x"] == pytest.approx(0.10)
+    assert controller.highlights[0]["w"] == pytest.approx(0.30)
+    assert "highlighted" in controller.pageLabel
+
+    controller.openUrl("https://datasheets.test/part.pdf", 5, "STM32L072KZ", "3.0 V – 17 V")
+    assert controller.highlights == []
+    assert controller.highlighted is False
     evidence = evidence_from_payload(
         {
             "source": "Circuit snapshot",
@@ -146,9 +150,8 @@ def test_evidence_without_url_cannot_open() -> None:
             "content": "L1 nets=1_1: Net-(C1-Pad1)",
         }
     )
-    from circuit_agent.models.evidence import evidence_card
-
     card = evidence_card(evidence)
     assert card["url"] == ""
     assert card["canOpen"] is False
     assert card["pageNumber"] == 0
+    assert card["coordinates"] == []

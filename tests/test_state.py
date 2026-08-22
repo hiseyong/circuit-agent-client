@@ -41,12 +41,26 @@ def test_invalid_transition_raises() -> None:
 def test_workspace_tabs_default_and_select() -> None:
     tabs = WorkspaceTabs()
     assert tabs.active == "schematic"
+    assert tabs.right_panel == "issues"
     assert tabs.is_visible("analysis") is True
     assert tabs.is_visible("chat") is True
     assert tabs.is_visible("pcb3d") is True
     assert tabs.is_visible("spice") is True
     tabs.select("analysis")
     assert tabs.active == "analysis"
+
+
+def test_workspace_tabs_review_and_ai_stay_in_right_panel() -> None:
+    tabs = WorkspaceTabs()
+    tabs.select("chat")
+    assert tabs.active == "schematic"
+    assert tabs.right_panel == "chat"
+    tabs.select("analysis")
+    assert tabs.active == "analysis"
+    assert tabs.right_panel == "chat"
+    tabs.select("issues")
+    assert tabs.active == "analysis"
+    assert tabs.right_panel == "issues"
 
 
 def test_workspace_tabs_hides_and_keeps_one_open() -> None:

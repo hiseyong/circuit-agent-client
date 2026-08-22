@@ -31,6 +31,8 @@ class AppController(QObject):
 
     tabsChanged = Signal()
     activeTabChanged = Signal()
+    rightPanelChanged = Signal()
+    logsOpenChanged = Signal()
     serverChanged = Signal()
 
     def __init__(self, config: AppConfig, parent: QObject | None = None) -> None:
@@ -38,10 +40,11 @@ class AppController(QObject):
         self._config = config
         self._tabs = WorkspaceTabs()
         self._server_ok = False
+        self._logs_open = False
 
     @Property(str, constant=True)
     def title(self) -> str:
-        return "Circuit Agent"
+        return "TraceCircuit"
 
     @Property(str, constant=True)
     def backendMode(self) -> str:
@@ -71,6 +74,14 @@ class AppController(QObject):
     def activeTab(self) -> str:
         return self._tabs.active
 
+    @Property(str, notify=rightPanelChanged)
+    def rightPanelTab(self) -> str:
+        return self._tabs.right_panel
+
+    @Property(bool, notify=logsOpenChanged)
+    def logsOpen(self) -> bool:
+        return self._logs_open
+
     @Property(bool, notify=tabsChanged)
     def showSchematic(self) -> bool:
         return self._tabs.is_visible("schematic")
@@ -98,17 +109,35 @@ class AppController(QObject):
     @Slot(str)
     def selectTab(self, tab_id: str) -> None:
         previous = self._tabs.active
+        previous_right = self._tabs.right_panel
         self._tabs.select(tab_id)
         if self._tabs.active != previous:
             self.activeTabChanged.emit()
+        if self._tabs.right_panel != previous_right:
+            self.rightPanelChanged.emit()
+
+    @Slot()
+    def toggleLogs(self) -> None:
+        self._logs_open = not self._logs_open
+        self.logsOpenChanged.emit()
+
+    @Slot(bool)
+    def setLogsOpen(self, open_logs: bool) -> None:
+        if self._logs_open == open_logs:
+            return
+        self._logs_open = open_logs
+        self.logsOpenChanged.emit()
 
     @Slot(str, bool)
     def setTabVisible(self, tab_id: str, visible: bool) -> None:
         previous_active = self._tabs.active
+        previous_right = self._tabs.right_panel
         self._tabs.set_visible(tab_id, visible)
         self.tabsChanged.emit()
         if self._tabs.active != previous_active:
             self.activeTabChanged.emit()
+        if self._tabs.right_panel != previous_right:
+            self.rightPanelChanged.emit()
 
 
 def create_backend_client(config: AppConfig) -> BackendClient:

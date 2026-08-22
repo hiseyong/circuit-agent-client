@@ -2,21 +2,24 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import ".."
 
 Rectangle {
     id: root
-    color: "#16181d"
+    color: "#ffffff"
+
+    Theme { id: theme }
 
     function statusColor(status) {
         if (status === "pending")
-            return "#e6b84d"
+            return theme.warning
         if (status === "accepted")
-            return "#3ecf8e"
+            return theme.success
         if (status === "rejected")
-            return "#e05d5d"
+            return theme.danger
         if (status === "reverted")
-            return "#9aa0a6"
-        return "#5b9fd4"
+            return theme.muted
+        return theme.brand
     }
 
     function statusLabel(status) {
@@ -37,20 +40,20 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 36
-            color: "#1e222a"
+            Layout.preferredHeight: 48
+            color: theme.surface
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 14
-                anchors.rightMargin: 10
+                anchors.leftMargin: 22
+                anchors.rightMargin: 20
                 spacing: 8
 
                 Text {
                     text: "ANALYSIS"
-                    color: "#9aa0a6"
-                    font.pixelSize: 11
-                    font.letterSpacing: 0.8
+                    color: theme.muted
+                    font.pixelSize: 12
+                    font.family: theme.mono
                     font.weight: Font.DemiBold
                 }
 
@@ -59,28 +62,18 @@ Rectangle {
                 Text {
                     visible: analysisController && analysisController.pendingCount > 0
                     text: analysisController ? (analysisController.pendingCount + " pending") : ""
-                    color: "#e6b84d"
+                    color: theme.warning
                     font.pixelSize: 11
+                    font.family: theme.mono
                 }
 
-                Button {
+                OutlineButton {
                     text: analysisController && analysisController.analyzing ? "Analyzing…" : "Refresh"
                     enabled: analysisController && !analysisController.analyzing
+                    implicitWidth: 82
+                    implicitHeight: 28
+                    labelColor: theme.text
                     onClicked: analysisController.refresh()
-                    background: Rectangle {
-                        color: parent.down ? "#2c3340" : (parent.hovered ? "#2a303b" : "#252a33")
-                        border.color: "#333845"
-                        radius: 4
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        color: parent.enabled ? "#e8eaed" : "#6d737c"
-                        font.pixelSize: 12
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    implicitHeight: 22
-                    implicitWidth: 88
                 }
             }
 
@@ -89,7 +82,7 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: 1
-                color: "#333845"
+                color: theme.border
             }
         }
 
@@ -101,18 +94,18 @@ Rectangle {
             Rectangle {
                 SplitView.preferredHeight: 220
                 SplitView.minimumHeight: 140
-                color: "#16181d"
+                color: theme.surface
 
                 Column {
                     anchors.fill: parent
-                    anchors.margins: 16
+                    anchors.margins: 22
                     spacing: 10
 
                     Text {
                         text: "CIRCUIT PURPOSE"
-                        color: "#9aa0a6"
-                        font.pixelSize: 10
-                        font.letterSpacing: 0.7
+                        color: theme.muted
+                        font.pixelSize: 11
+                        font.family: theme.mono
                         font.weight: Font.DemiBold
                     }
 
@@ -127,23 +120,25 @@ Rectangle {
                                 return analysisController.purpose
                             return "Open a KiCad project to analyze the circuit."
                         }
-                        color: "#e8eaed"
-                        font.pixelSize: 18
-                        font.weight: Font.DemiBold
+                        color: theme.text
+                        font.pixelSize: 16
+                        font.family: theme.sans
+                        font.weight: Font.Bold
                         wrapMode: Text.Wrap
                     }
 
                     Rectangle {
                         width: parent.width
                         height: 1
-                        color: "#333845"
+                        color: theme.border
                     }
 
                     Text {
                         width: parent.width
                         text: analysisController ? analysisController.summary : ""
-                        color: "#c5cad3"
-                        font.pixelSize: 13
+                        color: theme.text
+                        font.pixelSize: 11
+                        font.family: theme.sans
                         wrapMode: Text.Wrap
                     }
                 }
@@ -152,7 +147,7 @@ Rectangle {
             Rectangle {
                 SplitView.fillHeight: true
                 SplitView.minimumHeight: 180
-                color: "#16181d"
+                color: theme.surface
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -160,17 +155,17 @@ Rectangle {
 
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 32
-                        color: "#1e222a"
+                        Layout.preferredHeight: 40
+                        color: theme.surface
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.left: parent.left
-                            anchors.leftMargin: 14
+                            anchors.leftMargin: 22
                             text: "REVISION TIMELINE"
-                            color: "#9aa0a6"
-                            font.pixelSize: 10
-                            font.letterSpacing: 0.7
+                            color: theme.muted
+                            font.pixelSize: 11
+                            font.family: theme.mono
                             font.weight: Font.DemiBold
                         }
 
@@ -179,7 +174,7 @@ Rectangle {
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
                             height: 1
-                            color: "#333845"
+                            color: theme.border
                         }
                     }
 
@@ -217,7 +212,7 @@ Rectangle {
                                 width: 2
                                 anchors.top: parent.top
                                 anchors.bottom: parent.bottom
-                                color: "#333845"
+                                color: theme.border
                                 visible: index < historyList.count - 1
                             }
 
@@ -228,7 +223,7 @@ Rectangle {
                                 height: 12
                                 radius: 6
                                 color: root.statusColor(status)
-                                border.color: "#16181d"
+                                border.color: theme.surface
                                 border.width: 2
                             }
 
@@ -248,23 +243,25 @@ Rectangle {
                                         text: root.statusLabel(status)
                                         color: root.statusColor(status)
                                         font.pixelSize: 10
+                                        font.family: theme.mono
                                         font.weight: Font.DemiBold
                                     }
 
                                     Text {
                                         text: timestamp
-                                        color: "#6d737c"
-                                        font.pixelSize: 11
-                                        font.family: "monospace"
+                                        color: theme.muted
+                                        font.pixelSize: 10
+                                        font.family: theme.mono
                                     }
                                 }
 
                                 Text {
                                     width: parent.width
                                     text: title
-                                    color: "#e8eaed"
+                                    color: theme.text
                                     font.pixelSize: 13
-                                    font.weight: Font.DemiBold
+                                    font.family: theme.sans
+                                    font.weight: Font.Bold
                                     wrapMode: Text.Wrap
                                 }
 
@@ -272,8 +269,9 @@ Rectangle {
                                     visible: summary.length > 0
                                     width: parent.width
                                     text: summary
-                                    color: "#c5cad3"
-                                    font.pixelSize: 12
+                                    color: theme.muted
+                                    font.pixelSize: 11
+                                    font.family: theme.sans
                                     wrapMode: Text.Wrap
                                 }
 
@@ -283,24 +281,12 @@ Rectangle {
                                     spacing: 8
                                     topPadding: 4
 
-                                    Button {
+                                    OutlineButton {
                                         text: "Revert"
-                                        onClicked: analysisController.revertLatest()
-                                        background: Rectangle {
-                                            color: parent.down ? "#3a2428" : (parent.hovered ? "#4a2c31" : "#2c3340")
-                                            border.color: "#5a3338"
-                                            radius: 4
-                                        }
-                                        contentItem: Text {
-                                            text: parent.text
-                                            color: "#e8eaed"
-                                            font.pixelSize: 12
-                                            font.weight: Font.DemiBold
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
                                         implicitWidth: 64
                                         implicitHeight: 24
+                                        labelColor: theme.danger
+                                        onClicked: analysisController.revertLatest()
                                     }
                                 }
 
@@ -309,42 +295,22 @@ Rectangle {
                                     spacing: 8
                                     topPadding: 4
 
-                                    Button {
+                                    OutlineButton {
                                         text: "Commit"
-                                        onClicked: analysisController.acceptRevision(revisionId)
-                                        background: Rectangle {
-                                            color: parent.down ? "#2f7a52" : (parent.hovered ? "#35946a" : "#2d6b4f")
-                                            radius: 4
-                                        }
-                                        contentItem: Text {
-                                            text: parent.text
-                                            color: "#ffffff"
-                                            font.pixelSize: 12
-                                            font.weight: Font.DemiBold
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
                                         implicitWidth: 64
                                         implicitHeight: 24
+                                        labelColor: "#ffffff"
+                                        fill: theme.success
+                                        stroke: theme.success
+                                        onClicked: analysisController.acceptRevision(revisionId)
                                     }
 
-                                    Button {
+                                    OutlineButton {
                                         text: "Reject"
-                                        onClicked: analysisController.rejectRevision(revisionId)
-                                        background: Rectangle {
-                                            color: parent.down ? "#3a2428" : (parent.hovered ? "#4a2c31" : "#2c3340")
-                                            border.color: "#5a3338"
-                                            radius: 4
-                                        }
-                                        contentItem: Text {
-                                            text: parent.text
-                                            color: "#e8eaed"
-                                            font.pixelSize: 12
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
                                         implicitWidth: 64
                                         implicitHeight: 24
+                                        labelColor: theme.danger
+                                        onClicked: analysisController.rejectRevision(revisionId)
                                     }
                                 }
                             }
@@ -354,8 +320,9 @@ Rectangle {
                             anchors.centerIn: parent
                             visible: historyList.count === 0 && !(analysisController && analysisController.analyzing)
                             text: "No revision history yet"
-                            color: "#9aa0a6"
+                            color: theme.muted
                             font.pixelSize: 12
+                            font.family: theme.sans
                         }
                     }
                 }
@@ -368,6 +335,6 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         width: 1
-        color: "#333845"
+        color: theme.border
     }
 }

@@ -2,33 +2,49 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import ".."
 import "../components"
 
 Item {
     id: root
 
-    readonly property color bg: "#16181d"
-    readonly property color panel: "#1e222a"
-    readonly property color border: "#333845"
-    readonly property color text: "#e8eaed"
-    readonly property color muted: "#9aa0a6"
+    Theme { id: theme }
 
-    function tabVisible(tabId) {
-        if (!appController)
-            return false
-        if (tabId === "schematic")
-            return appController.showSchematic
-        if (tabId === "analysis")
-            return appController.showAnalysis
-        if (tabId === "issues")
-            return appController.showIssues
-        if (tabId === "chat")
-            return appController.showChat
-        if (tabId === "pcb3d")
-            return appController.showPcb3d
-        if (tabId === "spice")
-            return appController.showSpice
-        return false
+    property int selectedIssueIndex: 0
+    property string attachedTitle: ""
+    property string attachedReference: ""
+    property string attachedSource: ""
+    property string attachedDescription: ""
+    property string attachedSeverity: ""
+
+    readonly property var centerTabs: [
+        { "id": "schematic", "title": "Schematic" },
+        { "id": "analysis", "title": "Analysis" },
+        { "id": "pcb3d", "title": "PCB 3D" },
+        { "id": "spice", "title": "SPICE" }
+    ]
+
+    function rememberIssue(index, title, reference, source, description, severity) {
+        selectedIssueIndex = index
+        attachedTitle = title
+        attachedReference = reference
+        attachedSource = source
+        attachedDescription = description
+        attachedSeverity = severity
+    }
+
+    function connectionColor(connected, mock) {
+        if (mock)
+            return theme.warning
+        return connected ? theme.success : theme.danger
+    }
+
+    function connectionLabel(name, connected, mock, statusText) {
+        if (mock)
+            return "●  " + name + " mock"
+        if (connected)
+            return "●  " + name + " connected"
+        return "●  " + name + " " + (statusText || "disconnected").toLowerCase()
     }
 
     ColumnLayout {
@@ -38,7 +54,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 48
-            color: root.panel
+            color: theme.surface
 
             RowLayout {
                 anchors.fill: parent
@@ -47,88 +63,72 @@ Item {
                 spacing: 12
 
                 Text {
-                    text: appController ? appController.title : "Circuit Agent"
-                    color: root.text
+                    text: "TraceCircuit"
+                    color: theme.text
                     font.pixelSize: 16
-                    font.weight: Font.DemiBold
+                    font.family: theme.sans
+                    font.weight: Font.Bold
                 }
 
-                Button {
-                    id: tabsButton
-                    text: "Tabs"
-                    onClicked: tabMenu.open()
-                    background: Rectangle {
-                        color: tabsButton.down ? "#2c3340" : (tabsButton.hovered ? "#2a303b" : "#252a33")
-                        border.color: root.border
-                        radius: 4
-                    }
-                    contentItem: Text {
-                        text: tabsButton.text
-                        color: root.text
-                        font.pixelSize: 12
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    implicitHeight: 26
-                    implicitWidth: 56
+                Text {
+                    text: "/"
+                    color: theme.muted
+                    font.pixelSize: 11
+                    font.family: theme.mono
+                }
 
-                    Menu {
-                        id: tabMenu
-                        modal: true
+                Text {
+                    text: projectController ? projectController.projectFileName : ""
+                    color: theme.text
+                    font.pixelSize: 11
+                    font.family: theme.mono
+                    font.weight: Font.Medium
+                    elide: Text.ElideMiddle
+                    Layout.maximumWidth: 280
+                }
 
-                        MenuItem {
-                            text: "Schematic"
-                            checkable: true
-                            checked: appController ? appController.showSchematic : false
-                            onToggled: appController.setTabVisible("schematic", checked)
-                        }
-                        MenuItem {
-                            text: "Analysis"
-                            checkable: true
-                            checked: appController ? appController.showAnalysis : false
-                            onToggled: appController.setTabVisible("analysis", checked)
-                        }
-                        MenuItem {
-                            text: "Issues"
-                            checkable: true
-                            checked: appController ? appController.showIssues : false
-                            onToggled: appController.setTabVisible("issues", checked)
-                        }
-                        MenuItem {
-                            text: "Chat"
-                            checkable: true
-                            checked: appController ? appController.showChat : false
-                            onToggled: appController.setTabVisible("chat", checked)
-                        }
-                        MenuItem {
-                            text: "PCB 3D"
-                            checkable: true
-                            checked: appController ? appController.showPcb3d : false
-                            onToggled: appController.setTabVisible("pcb3d", checked)
-                        }
-                        MenuItem {
-                            text: "SPICE"
-                            checkable: true
-                            checked: appController ? appController.showSpice : false
-                            onToggled: appController.setTabVisible("spice", checked)
-                        }
-                    }
+                Text {
+                    visible: analysisController && analysisController.historyCount > 0
+                    text: analysisController
+                          ? ("·  change set #" + analysisController.historyCount)
+                          : ""
+                    color: theme.muted
+                    font.pixelSize: 10
+                    font.family: theme.mono
                 }
 
                 Item { Layout.fillWidth: true }
 
-                StatusBadge {
-                    label: "KiCad"
-                    statusText: kicadController ? kicadController.status : "DISCONNECTED"
-                    connected: kicadController ? kicadController.connected : false
-                    mock: kicadController && kicadController.status === "MOCK"
+                Text {
+                    text: root.connectionLabel(
+                        "KiCad",
+                        kicadController && kicadController.connected,
+                        kicadController && kicadController.status === "MOCK",
+                        kicadController ? kicadController.status : ""
+                    )
+                    color: root.connectionColor(
+                        kicadController && kicadController.connected,
+                        kicadController && kicadController.status === "MOCK"
+                    )
+                    font.pixelSize: 10
+                    font.family: theme.mono
+                    font.weight: Font.Medium
                 }
 
-                StatusBadge {
-                    label: "Server"
-                    statusText: appController ? appController.serverStatus : "DISCONNECTED"
-                    connected: appController ? appController.serverConnected : false
-                    mock: appController && appController.serverStatus === "MOCK"
+                Text {
+                    text: root.connectionLabel(
+                        "Server",
+                        appController && appController.serverConnected,
+                        appController && appController.serverStatus === "MOCK",
+                        appController ? appController.serverStatus : ""
+                    )
+                    color: root.connectionColor(
+                        appController && appController.serverConnected,
+                        appController && appController.serverStatus === "MOCK"
+                    )
+                    font.pixelSize: 10
+                    font.family: theme.mono
+                    font.weight: Font.Medium
                 }
             }
 
@@ -137,53 +137,56 @@ Item {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: 1
-                color: root.border
+                color: theme.border
             }
         }
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
-            color: root.panel
-            visible: appController !== null
+            Layout.preferredHeight: 40
+            color: theme.surface
 
             Row {
                 id: tabRow
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                spacing: 4
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.leftMargin: 18
+                spacing: 34
 
                 Repeater {
-                    model: [
-                        { "id": "schematic", "title": "Schematic" },
-                        { "id": "analysis", "title": "Analysis" },
-                        { "id": "issues", "title": "Issues" },
-                        { "id": "chat", "title": "Chat" },
-                        { "id": "pcb3d", "title": "PCB 3D" },
-                        { "id": "spice", "title": "SPICE" }
-                    ]
+                    model: root.centerTabs
 
-                    Rectangle {
+                    Item {
                         required property var modelData
-                        visible: root.tabVisible(modelData.id)
-                        height: 24
-                        width: tabLabel.implicitWidth + 20
-                        anchors.verticalCenter: parent.verticalCenter
-                        radius: 4
-                        color: (appController && appController.activeTab === modelData.id) ? "#2a3f5f" : "transparent"
-                        border.color: (appController && appController.activeTab === modelData.id) ? "#3d5f86" : "transparent"
+                        width: tabLabel.implicitWidth
+                        height: parent.height
 
                         Text {
                             id: tabLabel
-                            anchors.centerIn: parent
+                            anchors.verticalCenter: parent.verticalCenter
                             text: modelData.title
-                            color: (appController && appController.activeTab === modelData.id) ? "#e8eaed" : "#9aa0a6"
-                            font.pixelSize: 12
-                            font.weight: (appController && appController.activeTab === modelData.id) ? Font.DemiBold : Font.Normal
+                            color: (appController && appController.activeTab === modelData.id)
+                                   ? theme.text : theme.muted
+                            font.pixelSize: 10
+                            font.family: theme.mono
+                            font.weight: (appController && appController.activeTab === modelData.id)
+                                         ? Font.Medium : Font.Normal
+                        }
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            height: 2
+                            color: theme.brand
+                            visible: appController && appController.activeTab === modelData.id
                         }
 
                         MouseArea {
                             anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
                             onClicked: appController.selectTab(modelData.id)
                         }
                     }
@@ -195,106 +198,219 @@ Item {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: 1
-                color: root.border
+                color: theme.border
             }
         }
 
         SplitView {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            orientation: Qt.Vertical
+            orientation: Qt.Horizontal
 
-            SplitView {
-                SplitView.fillHeight: true
-                SplitView.minimumHeight: 280
-                orientation: Qt.Horizontal
+            Sidebar {
+                SplitView.preferredWidth: 300
+                SplitView.minimumWidth: 220
+                SplitView.maximumWidth: 420
+            }
 
-                Sidebar {
-                    SplitView.preferredWidth: 240
-                    SplitView.minimumWidth: 180
+            Item {
+                SplitView.fillWidth: true
+                SplitView.minimumWidth: 360
+
+                SchematicView {
+                    anchors.fill: parent
+                    visible: appController && appController.activeTab === "schematic"
                 }
 
-                Item {
-                    SplitView.fillWidth: true
-                    SplitView.minimumWidth: 360
+                AnalysisView {
+                    anchors.fill: parent
+                    visible: appController && appController.activeTab === "analysis"
+                }
 
-                    SchematicView {
-                        anchors.fill: parent
-                        visible: appController && appController.activeTab === "schematic"
-                    }
+                Pcb3dView {
+                    anchors.fill: parent
+                    visible: appController && appController.activeTab === "pcb3d"
+                }
 
-                    AnalysisView {
-                        anchors.fill: parent
-                        visible: appController && appController.activeTab === "analysis"
-                    }
+                SpiceView {
+                    anchors.fill: parent
+                    visible: appController && appController.activeTab === "spice"
+                }
 
-                    IssuesView {
-                        anchors.fill: parent
-                        visible: appController && appController.activeTab === "issues"
-                    }
+                Rectangle {
+                    id: analysisLoading
+                    anchors.fill: parent
+                    visible: analysisController && analysisController.analyzing
+                    color: "#ccffffff"
+                    z: 100
 
-                    ChatView {
-                        anchors.fill: parent
-                        visible: appController && appController.activeTab === "chat"
-                    }
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 14
 
-                    Pcb3dView {
-                        anchors.fill: parent
-                        visible: appController && appController.activeTab === "pcb3d"
-                    }
+                        BusyIndicator {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            running: analysisLoading.visible
+                        }
 
-                    SpiceView {
-                        anchors.fill: parent
-                        visible: appController && appController.activeTab === "spice"
-                    }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "Analyzing circuit"
+                            color: theme.text
+                            font.pixelSize: 16
+                            font.family: theme.sans
+                            font.weight: Font.Bold
+                        }
 
-                    Rectangle {
-                        id: analysisLoading
-                        anchors.fill: parent
-                        visible: analysisController && analysisController.analyzing
-                        color: "#cc16181d"
-                        z: 100
-
-                        Column {
-                            anchors.centerIn: parent
-                            spacing: 14
-
-                            BusyIndicator {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                running: analysisLoading.visible
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "Analyzing circuit"
-                                color: "#e8eaed"
-                                font.pixelSize: 18
-                                font.weight: Font.DemiBold
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                width: 360
-                                horizontalAlignment: Text.AlignHCenter
-                                wrapMode: Text.Wrap
-                                text: "Sending components and connections to the server. You can still open another project from the sidebar."
-                                color: "#9aa0a6"
-                                font.pixelSize: 13
-                            }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 360
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                            text: "Sending components and connections to the server. You can still open another project from the sidebar."
+                            color: theme.muted
+                            font.pixelSize: 12
+                            font.family: theme.sans
                         }
                     }
                 }
             }
 
-            LogView {
-                SplitView.preferredHeight: 140
-                SplitView.minimumHeight: 80
+            Rectangle {
+                SplitView.preferredWidth: 420
+                SplitView.minimumWidth: 320
+                SplitView.maximumWidth: 560
+                color: theme.surface
+
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    width: 1
+                    color: theme.border
+                }
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 0
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 42
+                        color: theme.surface
+
+                        Row {
+                            anchors.fill: parent
+                            anchors.leftMargin: 16
+                            spacing: 24
+
+                            Item {
+                                width: reviewLabel.implicitWidth
+                                height: parent.height
+
+                                Text {
+                                    id: reviewLabel
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "REVIEW"
+                                    color: (appController && appController.rightPanelTab === "issues")
+                                           ? theme.text : theme.muted
+                                    font.pixelSize: 10
+                                    font.family: theme.sans
+                                    font.weight: (appController && appController.rightPanelTab === "issues")
+                                                 ? Font.Bold : Font.Medium
+                                }
+
+                                Rectangle {
+                                    anchors.left: parent.left
+                                    width: 48
+                                    anchors.bottom: parent.bottom
+                                    height: 3
+                                    color: theme.brand
+                                    visible: appController && appController.rightPanelTab === "issues"
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: appController.selectTab("issues")
+                                }
+                            }
+
+                            Item {
+                                width: aiLabel.implicitWidth
+                                height: parent.height
+
+                                Text {
+                                    id: aiLabel
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "AI"
+                                    color: (appController && appController.rightPanelTab === "chat")
+                                           ? theme.text : theme.muted
+                                    font.pixelSize: 10
+                                    font.family: theme.mono
+                                    font.weight: (appController && appController.rightPanelTab === "chat")
+                                                 ? Font.DemiBold : Font.Medium
+                                }
+
+                                Rectangle {
+                                    anchors.left: parent.left
+                                    width: 24
+                                    anchors.bottom: parent.bottom
+                                    height: 3
+                                    color: theme.brand
+                                    visible: appController && appController.rightPanelTab === "chat"
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: appController.selectTab("chat")
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            height: 1
+                            color: theme.border
+                        }
+                    }
+
+                    IssuesView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: appController && appController.rightPanelTab === "issues"
+                        selectedIndex: root.selectedIssueIndex
+                        onIssueActivated: function (index, title, reference, source, description, severity) {
+                            root.rememberIssue(index, title, reference, source, description, severity)
+                        }
+                    }
+
+                    ChatView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: appController && appController.rightPanelTab === "chat"
+                        attachedTitle: root.attachedTitle
+                        attachedReference: root.attachedReference
+                        attachedSource: root.attachedSource
+                        attachedDescription: root.attachedDescription
+                    }
+                }
             }
+        }
+
+        LogView {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 160
+            Layout.minimumHeight: 80
+            visible: appController && appController.logsOpen
         }
 
         AgentStatus {
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
+            Layout.preferredHeight: 28
         }
     }
 }

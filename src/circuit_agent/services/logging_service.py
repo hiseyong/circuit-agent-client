@@ -72,6 +72,10 @@ class LoggingService(QObject):
     def plainText(self) -> str:
         return self._model.plain_text()
 
+    @Property(int, notify=logAdded)
+    def logCount(self) -> int:
+        return self._model.rowCount()
+
     def append_entry(self, level: str, message: str) -> None:
         self._model.append(level, message)
         self.logAdded.emit()

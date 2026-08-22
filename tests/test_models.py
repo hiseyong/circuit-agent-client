@@ -1,3 +1,5 @@
+import pytest
+
 from circuit_agent.application.qt_models import LogListModel
 from circuit_agent.models.agent import AgentReply, ChatMessage, ChatRole
 from circuit_agent.models.analysis import (
@@ -9,7 +11,12 @@ from circuit_agent.models.analysis import (
     RevisionStatus,
     connections_from_raw,
 )
-from circuit_agent.models.evidence import Evidence, evidence_card, evidence_from_payload
+from circuit_agent.models.evidence import (
+    Evidence,
+    evidence_card,
+    evidence_from_payload,
+    parse_evidence_boxes,
+)
 from circuit_agent.models.issue import CircuitIssue, IssueSeverity, parse_issue_references
 from circuit_agent.models.project import Component, Project
 
@@ -98,6 +105,35 @@ def test_evidence_reads_datasheet_url_field() -> None:
     )
     assert evidence.url == "https://datasheets.test/TPS62160.pdf"
     assert evidence_card(evidence)["canOpen"] is True
+
+
+def test_evidence_coordinates_become_highlight_boxes() -> None:
+    evidence = evidence_from_payload(
+        {
+            "source": "Manufacturer Datasheet",
+            "document": "Cached datasheet extract",
+            "page": 5,
+            "section": "Input Voltage",
+            "content": "3.0 V – 17 V",
+            "datasheet_url": "https://datasheets.test/TPS62160.pdf",
+            "coordinates": [
+                {"x": 0.12, "y": 0.20},
+                {"x": 0.48, "y": 0.20},
+                {"x": 0.48, "y": 0.28},
+                {"x": 0.12, "y": 0.28},
+            ],
+        }
+    )
+    card = evidence_card(evidence)
+    assert len(card["coordinates"]) == 1
+    box = card["coordinates"][0]
+    assert box["x"] == pytest.approx(0.12)
+    assert box["y"] == pytest.approx(0.20)
+    assert box["w"] == pytest.approx(0.36)
+    assert box["h"] == pytest.approx(0.08)
+    assert parse_evidence_boxes({"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.1}) == [
+        {"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.1}
+    ]
 
 
 def test_chat_message_and_reply_defaults() -> None:

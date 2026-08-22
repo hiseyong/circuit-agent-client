@@ -15,8 +15,8 @@ from circuit_agent.application.app import Application
 
 def main() -> int:
     os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
-    QGuiApplication.setApplicationName("Circuit Agent")
-    QGuiApplication.setApplicationDisplayName("Circuit Agent")
+    QGuiApplication.setApplicationName("TraceCircuit")
+    QGuiApplication.setApplicationDisplayName("TraceCircuit")
     QGuiApplication.setOrganizationName("CircuitAgent")
 
     qapp = QGuiApplication(sys.argv)

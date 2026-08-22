@@ -4,13 +4,17 @@ import QtQuick.Controls.Basic
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Window
+import ".."
 
 Rectangle {
     id: root
-    color: "#1e222a"
+    color: "#ffffff"
+
+    Theme { id: theme }
 
     property int bubbleAnchorIndex: -1
     property real bubbleAnchorY: 0
+    property bool rowHovered: false
 
     function chosenFile(dialog) {
         if (dialog.selectedFile && dialog.selectedFile.toString().length > 0)
@@ -35,7 +39,8 @@ Rectangle {
         detailPopup.x = pos.x - 4
         bubbleAnchorY = pos.y
         detailPopup.y = Math.max(8, Math.min(pos.y - detailPopup.height / 2, Overlay.overlay.height - detailPopup.height - 8))
-        detailPopup.open()
+        if (!detailPopup.opened)
+            detailPopup.open()
     }
 
     function refreshBubble() {
@@ -48,25 +53,23 @@ Rectangle {
 
     function keepDetailOpen() {
         return (projectController && projectController.detailPinned)
+               || root.rowHovered
                || listHover.hovered
                || (detailPopup.opened && detailCard.hovered)
     }
 
-    function hoverAt(x, y) {
+    function enterRow(row) {
         hoverClearTimer.stop()
-        if (!projectController)
+        root.rowHovered = true
+        if (!row || !projectController)
             return
-        const idx = componentList.indexAt(x, y + componentList.contentY)
-        if (idx < 0) {
-            root.scheduleHoverClear()
-            return
-        }
-        const row = componentList.itemAtIndex(idx)
-        if (!row)
-            return
-        root.bubbleAnchorIndex = idx
+        const alreadyShown = root.bubbleAnchorIndex === row.index
+                             && detailPopup.opened
+                             && projectController.detailReference === row.reference
+        root.bubbleAnchorIndex = row.index
         projectController.hoverComponent(row.reference)
-        root.placeBubble(row)
+        if (!alreadyShown)
+            root.placeBubble(row)
     }
 
     function scheduleHoverClear() {
@@ -77,20 +80,18 @@ Rectangle {
         hoverClearTimer.restart()
     }
 
+    function partLabel(partNumber, value) {
+        if (partNumber && partNumber.length > 0)
+            return partNumber
+        return value || ""
+    }
+
     Timer {
         id: hoverClearTimer
-        interval: 200
+        interval: 280
         onTriggered: {
             if (root.keepDetailOpen())
                 return
-            if (listHover.hovered) {
-                const x = listHover.point.position.x
-                const y = listHover.point.position.y
-                if (componentList.indexAt(x, y + componentList.contentY) >= 0) {
-                    root.hoverAt(x, y)
-                    return
-                }
-            }
             if (projectController && projectController.detailReference)
                 projectController.clearHover(projectController.detailReference)
         }
@@ -126,165 +127,152 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 12
-        spacing: 10
-
-        Text {
-            text: "PROJECT"
-            color: "#9aa0a6"
-            font.pixelSize: 11
-            font.letterSpacing: 0.8
-            font.weight: Font.DemiBold
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 6
-
-            Button {
-                text: "New Project"
-                onClicked: newDialog.open()
-                background: Rectangle {
-                    color: parent.down ? "#2c3340" : (parent.hovered ? "#2a303b" : "#252a33")
-                    border.color: "#333845"
-                    radius: 4
-                }
-                contentItem: Text {
-                    text: parent.text
-                    color: "#e8eaed"
-                    font.pixelSize: 12
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-
-            Button {
-                text: "Open Project"
-                onClicked: root.openProjectDialog()
-                background: Rectangle {
-                    color: parent.down ? "#2c3340" : (parent.hovered ? "#2a303b" : "#252a33")
-                    border.color: "#333845"
-                    radius: 4
-                }
-                contentItem: Text {
-                    text: parent.text
-                    color: "#e8eaed"
-                    font.pixelSize: 12
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-        }
-
-        Text {
-            text: projectController ? projectController.projectName : ""
-            color: "#e8eaed"
-            font.pixelSize: 14
-            font.weight: Font.DemiBold
-            elide: Text.ElideMiddle
-            Layout.fillWidth: true
-        }
-
-        Text {
-            text: "└ " + (projectController ? projectController.projectFileName : "")
-            color: "#c5cad3"
-            font.pixelSize: 13
-            font.family: "monospace"
-            elide: Text.ElideMiddle
-            Layout.fillWidth: true
-        }
-
-        Text {
-            text: "Status: " + (projectController ? projectController.projectStatus : "")
-            color: "#9aa0a6"
-            font.pixelSize: 12
-        }
+        spacing: 0
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            color: "#333845"
-        }
+            Layout.preferredHeight: 74
+            color: theme.surface
 
-        Text {
-            text: "COMPONENTS"
-            color: "#9aa0a6"
-            font.pixelSize: 11
-            font.letterSpacing: 0.8
-            font.weight: Font.DemiBold
-        }
+            Column {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: 20
+                anchors.rightMargin: 16
+                spacing: 3
 
-        Item {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            ListView {
-                id: componentList
-                anchors.fill: parent
-                clip: true
-                model: projectController ? projectController.componentModel : null
-                spacing: 2
-                onContentYChanged: root.refreshBubble()
-
-                delegate: Rectangle {
-                    id: row
-                    required property string reference
-                    required property string value
-                    required property int index
-
-                    width: componentList.width
-                    height: 28
-                    radius: 4
-                    color: projectController && projectController.detailReference === reference
-                           ? "#2a3f5f"
-                           : "transparent"
+                RowLayout {
+                    width: parent.width
+                    spacing: 8
 
                     Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.left: parent.left
-                        anchors.leftMargin: 4
-                        text: (index === componentList.count - 1 ? "└ " : "├ ") + reference
-                              + (value.length > 0 ? "  " + value : "")
-                        color: "#e8eaed"
-                        font.pixelSize: 13
-                        font.family: "monospace"
-                        elide: Text.ElideRight
-                        width: parent.width - 8
+                        text: "components"
+                        color: theme.text
+                        font.pixelSize: 15
+                        font.family: theme.mono
+                        font.weight: Font.DemiBold
                     }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            if (!projectController)
-                                return
-                            root.bubbleAnchorIndex = row.index
-                            projectController.togglePinComponent(row.reference)
-                            root.placeBubble(row)
-                        }
+                    Item { Layout.fillWidth: true }
+
+                    OutlineButton {
+                        text: "New"
+                        implicitWidth: 48
+                        implicitHeight: 22
+                        onClicked: newDialog.open()
+                    }
+
+                    OutlineButton {
+                        text: "Open"
+                        implicitWidth: 52
+                        implicitHeight: 22
+                        onClicked: root.openProjectDialog()
                     }
                 }
 
                 Text {
-                    anchors.centerIn: parent
-                    visible: componentList.count === 0
-                    text: "No components"
-                    color: "#9aa0a6"
-                    font.pixelSize: 12
+                    text: componentList.count + " shown"
+                    color: theme.muted
+                    font.pixelSize: 11
+                    font.family: theme.mono
                 }
+            }
+        }
+
+        ListView {
+            id: componentList
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            cacheBuffer: 400
+            model: projectController ? projectController.componentModel : null
+            spacing: 0
+            onContentYChanged: root.refreshBubble()
+
+            delegate: Rectangle {
+                id: row
+                required property string reference
+                required property string value
+                required property string partNumber
+                required property int index
+
+                readonly property bool selected: projectController
+                                                 && projectController.detailReference === reference
+
+                width: componentList.width
+                height: 58
+                color: selected ? theme.canvas : theme.surface
+
+                Row {
+                    anchors.fill: parent
+                    anchors.leftMargin: 20
+                    anchors.rightMargin: 16
+                    spacing: 12
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: selected ? "●" : "○"
+                        color: selected ? theme.brand : theme.muted
+                        font.pixelSize: 12
+                        font.family: theme.mono
+                    }
+
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            text: row.reference
+                            color: theme.brand
+                            font.pixelSize: 13
+                            font.family: theme.mono
+                            font.weight: Font.Medium
+                        }
+
+                        Text {
+                            visible: root.partLabel(row.partNumber, row.value).length > 0
+                            text: root.partLabel(row.partNumber, row.value)
+                            color: theme.muted
+                            font.pixelSize: 11
+                            font.family: theme.mono
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onEntered: root.enterRow(row)
+                    onExited: {
+                        root.rowHovered = false
+                        root.scheduleHoverClear()
+                    }
+                    onClicked: {
+                        if (!projectController)
+                            return
+                        root.bubbleAnchorIndex = row.index
+                        projectController.togglePinComponent(row.reference)
+                        root.placeBubble(row)
+                    }
+                }
+            }
+
+            Text {
+                anchors.centerIn: parent
+                visible: componentList.count === 0
+                text: "No components"
+                color: theme.muted
+                font.pixelSize: 12
+                font.family: theme.sans
             }
 
             HoverHandler {
                 id: listHover
                 acceptedDevices: PointerDevice.AllDevices
                 onHoveredChanged: {
-                    if (hovered)
-                        root.hoverAt(point.position.x, point.position.y)
-                    else
+                    if (!hovered)
                         root.scheduleHoverClear()
-                }
-                onPointChanged: {
-                    if (hovered)
-                        root.hoverAt(point.position.x, point.position.y)
                 }
             }
         }
@@ -295,7 +283,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         width: 1
-        color: "#333845"
+        color: theme.border
     }
 
     Popup {
@@ -306,6 +294,8 @@ Rectangle {
         focus: false
         clip: false
         closePolicy: Popup.NoAutoClose
+        enter: Transition {}
+        exit: Transition {}
         background: Item {}
 
         ComponentDetailCard {

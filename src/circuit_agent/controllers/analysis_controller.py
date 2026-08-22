@@ -86,6 +86,10 @@ class AnalysisController(QObject):
         return self._history
 
     @Property(int, notify=historyChanged)
+    def historyCount(self) -> int:
+        return self._history.rowCount()
+
+    @Property(int, notify=historyChanged)
     def pendingCount(self) -> int:
         return self._history.pending_count()
 

@@ -146,6 +146,8 @@ def issue_payload(issue: CircuitIssue) -> dict[str, Any]:
             entry["page"] = item.page
         if item.url:
             entry["datasheet_url"] = item.url
+        if item.coordinates:
+            entry["coordinates"] = list(item.coordinates)
         if item.confidence is not None:
             entry["confidence"] = item.confidence
         if item.metadata:

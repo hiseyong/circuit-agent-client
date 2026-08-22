@@ -58,12 +58,14 @@ class AgentStateMachine:
         return self.status
 
 
-TAB_IDS = ("schematic", "analysis", "issues", "chat", "pcb3d", "spice")
+CENTER_TAB_IDS = ("schematic", "analysis", "pcb3d", "spice")
+RIGHT_TAB_IDS = ("issues", "chat")
+TAB_IDS = CENTER_TAB_IDS + RIGHT_TAB_IDS
 TAB_TITLES = {
     "schematic": "Schematic",
     "analysis": "Analysis",
-    "issues": "Issues",
-    "chat": "Chat",
+    "issues": "Review",
+    "chat": "AI",
     "pcb3d": "PCB 3D",
     "spice": "SPICE",
 }
@@ -75,6 +77,7 @@ class WorkspaceTabs:
     def __init__(self) -> None:
         self.visible: dict[str, bool] = {tab_id: True for tab_id in TAB_IDS}
         self.active = "schematic"
+        self.right_panel = "issues"
 
     def is_visible(self, tab_id: str) -> bool:
         return self.visible.get(tab_id, False)
@@ -89,8 +92,18 @@ class WorkspaceTabs:
             self.active = tab_id
         if not visible and self.active == tab_id:
             self.active = next(key for key, on in self.visible.items() if on)
+        if tab_id in RIGHT_TAB_IDS:
+            visible_right = [key for key in RIGHT_TAB_IDS if self.visible.get(key)]
+            if visible and self.right_panel not in visible_right:
+                self.right_panel = tab_id
+            elif not visible and self.right_panel == tab_id and visible_right:
+                self.right_panel = visible_right[0]
 
     def select(self, tab_id: str) -> None:
+        if tab_id in RIGHT_TAB_IDS:
+            if self.is_visible(tab_id):
+                self.right_panel = tab_id
+            return
         if self.is_visible(tab_id):
             self.active = tab_id
 
